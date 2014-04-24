@@ -263,9 +263,7 @@
          (re-pl-utils:owl-has-query :subject owl-id :predicate #"knowrob:taskContext")))
     (loop for x in task-contexts
          for (lit (tp_ type ctx)) = (car x)
-         collect ctx)
-    ))
-
+         collect ctx)))
 ;; a "task" is a subclass of knowrob:CRAMEvent
 ;; (defun trace-task->relational (task-owl-id)
 ;;   )
@@ -304,6 +302,31 @@
               (get-subactions sa)))
         subactions)))
 
+(defun mongo-desig->predicate-list (desig &key (filter-properties nil))
+  (let* ((desig-type (cdr (assoc '_designator_type desig)))
+         (desig-identifier (gensym
+                            (if (null desig-type)
+                                "DESIG"
+                                (string-upcase desig-type))))
+         (filter-properties (append filter-properties '(_designator_type))))
+    (values
+     (append
+      `((,(intern (if (null desig-type)
+               "DESIGNATOR"
+               (string-upcase desig-type)))
+          ,desig-identifier))
+      (loop for desig-prop-pair in desig
+         for prop = (car desig-prop-pair)
+         for prop-val = (cdr desig-prop-pair)
+         unless (member prop filter-properties)
+         append
+           (if (listp prop-val)
+               (multiple-value-bind (pred-lst new-desig-id)
+                   (mongo-desig->predicate-list prop-val :filter-properties filter-properties)
+                 (append `((,prop ,desig-identifier ,new-desig-id))
+                         pred-lst))
+               (list (list prop desig-identifier prop-val)))))
+     desig-identifier)))
 
 ;;(db.use "roslog")
 ;;(pp (db.find "logged_designators" :all :selector (kv "__recorded" 1) :limit 0))

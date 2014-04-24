@@ -1,0 +1,6 @@
+* to start: roslaunch mod_execution_trace mod_execution_trace
+
+* load mongo stuff:
+  - (ql:quickload "cl-mongo")
+    (use-package :cl-mongo)
+  - sudo service mongodb start

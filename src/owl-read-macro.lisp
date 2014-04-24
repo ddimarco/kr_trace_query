@@ -1,0 +1,39 @@
+(in-package :kr-trace-query)
+
+(defparameter *owl-namespace-shortcuts* (make-hash-table :test 'equalp))
+
+(defun register-owl-namespace (short full)
+  (setf (gethash short *owl-namespace-shortcuts*) full))
+(defun get-owl-namespace (short)
+  (gethash short *owl-namespace-shortcuts*))
+
+(defun owl-symbol-reader (stream sub-char numarg)
+  "Defines a read macro for shortcut representation of OWL identifiers. E.g.: #\"knowrob:Thing\""
+  (declare (ignore sub-char numarg))
+  (let ((string
+         (coerce
+          (loop for c = (read-char stream)
+             until (char= c #\")
+             collect c)
+          'string)))
+    (unless (position #\: string)
+      (error "no ':' in owl identifier ~s, so no namespace can be found." string))
+    (let ((namespace-short (subseq string 0 (position #\: string)))
+          (identifier (subseq string (1+ (position #\: string)))))
+      (let ((namespace-resolved (get-owl-namespace namespace-short)))
+        (when (null namespace-resolved)
+          (error "could not resolve owl namespace ~s in ~s!" namespace-short string))
+        (concatenate 'string namespace-resolved "#" identifier)))))
+
+(eval-when (:load-toplevel)
+  (register-owl-namespace "knowrob" "http://ias.cs.tum.edu/kb/knowrob.owl")
+  (register-owl-namespace "w3" "http://www.w3.org/2002/07/owl")
+  (register-owl-namespace "cram_log" "http://ias.cs.tum.edu/kb/cram_log.owl")
+  (register-owl-namespace "rdf" "http://www.w3.org/1999/02/22-rdf-syntax-ns")
+  (register-owl-namespace "rdfs" "http://www.w3.org/2000/01/rdf-schema")
+  (register-owl-namespace "owl" "http://www.w3.org/2002/07/owl")
+  (register-owl-namespace "xsd" "http://www.w3.org/2001/XMLSchema#")
+  (set-dispatch-macro-character #\# #\" #'owl-symbol-reader))
+
+;; (defun test-namespace-reader ()
+;;   (format t "namespace: ~a~%" #"knowrob:Action"))

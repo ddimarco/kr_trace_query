@@ -7,6 +7,21 @@
 (defun get-owl-namespace (short)
   (gethash short *owl-namespace-shortcuts*))
 
+(defun shorten-owl-id (full)
+  "converts a fully namespaced owl id to a shortened one. Should be used only for display."
+  ;; TODO: rather inefficient
+  (let ((res
+         (loop for key being the hash-keys of *owl-namespace-shortcuts*
+            using (hash-value value)
+            for val-len = (length value)
+            when (and (> (length full) val-len)
+                      (string= (subseq full 0 val-len)
+                               value))
+            return (concatenate 'string key ":" (subseq full (1+ val-len))))))
+    (if res
+        res
+        full)))
+
 (defun owl-symbol-reader (stream sub-char numarg)
   "Defines a read macro for shortcut representation of OWL identifiers. E.g.: #\"knowrob:Thing\""
   (declare (ignore sub-char numarg))

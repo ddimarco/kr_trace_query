@@ -1,5 +1,3 @@
-; -*- Mode: Lisp; Syntax: ANSI-Common-Lisp; Base: 10 -*-
-
 (asdf:defsystem kr-trace-query
   :name "kr-trace-query"
   :author "Daniel Di Marco"
@@ -16,6 +14,8 @@
             ((:file "package")
              (:file "owl-read-macro" :depends-on ("package"))
              (:file "sandbox" :depends-on ("owl-read-macro"))
+             (:file "vistools" :depends-on ("sandbox"))
+             (:file "queries" :depends-on ("sandbox"))
              ))))
 
 

@@ -47,7 +47,8 @@
   (register-owl-namespace "rdf" "http://www.w3.org/1999/02/22-rdf-syntax-ns")
   (register-owl-namespace "rdfs" "http://www.w3.org/2000/01/rdf-schema")
   (register-owl-namespace "owl" "http://www.w3.org/2002/07/owl")
-  (register-owl-namespace "xsd" "http://www.w3.org/2001/XMLSchema#")
+  (register-owl-namespace "xsd" "http://www.w3.org/2001/XMLSchema")
+  (register-owl-namespace "ias_semantic_map" "http://ias.cs.tum.edu/kb/ias_semantic_map.owl")
   (set-dispatch-macro-character #\# #\" #'owl-symbol-reader))
 
 ;; (defun test-namespace-reader ()

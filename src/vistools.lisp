@@ -43,18 +43,18 @@
         (with-open-file (str "/tmp/owl.dot" :direction :output :if-exists :supersede)
           (write-owl owlid depth str)))))
 
-(defun tasks->graphviz (int-time-lst)
+(defun tasks->graphviz (time-lst)
   (with-open-file (str "/tmp/bla.dot" :direction :output :if-exists :supersede)
     (format str "digraph G {~%")
     (format str " subgraph cluster_time_points {~%")
     (format str "order=LR; node [style=filled];~%")
-    (loop for tp-uri in int-time-lst
+    (loop for tp-uri in time-lst
        for tp = (timepoint-id->time tp-uri)
        do
          (format str "~a " tp))
     (format str ";~% }~%")
 
-    (loop for tp-uri in int-time-lst
+    (loop for tp-uri in time-lst
        for tp = (timepoint-id->time tp-uri)
          with prev = nil
        do
@@ -62,7 +62,7 @@
            (format str "~a -> ~a;~%" prev tp))
          (setf prev tp))
 
-    (loop for tp-uri in int-time-lst
+    (loop for tp-uri in time-lst
        for tp = (timepoint-id->time tp-uri)
        for start-tasks = (cut:force-ll
                           (re-pl-utils:pl-query (?t)
@@ -76,3 +76,5 @@
          (dolist (st start-tasks)
            (format str "  ~a -> ~a;~%" tp (shorten-uri st))))
     (format str "}~%")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

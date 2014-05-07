@@ -15,10 +15,17 @@
 (eval-when (:load-toplevel)
   (init-mongo-db))
 
+;;(defparameter *map-name* #"ias_semantic_map:SemanticEnvironmentMap_PM580j")
+;; cl-semantic-map-util:get-semantic-map to get map
+(crs:def-fact-group sem-map-stuff (cl-semantic-map-utils:semantic-map-name)
+  (crs:<- (cl-semantic-map-utils:semantic-map-name
+           "http://ias.cs.tum.edu/kb/ias_semantic_map.owl#SemanticEnvironmentMap_PM580j")))
+
 (defun init-kr ()
   (roslisp:start-ros-node "kr_trace_query")
+  (json-prolog:prolog '("register_ros_package" "iai_maps"))
   (load-experiment)
-  )
+  (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room"))
 
 (defun all-action-classes ()
   (cut:with-vars-strictly-bound (?l)
@@ -86,33 +93,23 @@
                              (car (gethash tsk2 start-end-map))))))
     lst))
 
-(defun timepoint-id->time (tp-id)
-  (let ((str (subseq tp-id (1+ (position #\_ tp-id :from-end t)))))
-    (parse-integer str)))
 
-(defun sort-times (timepoints)
-  (let ((timepoints (sort timepoints
-                          #'<
-                          :key (lambda (tp) (timepoint-id->time tp)))))
-    timepoints))
+;; (defun get-all-obj-pose-beliefs (int-time-lst)
+;;   (remove nil
+;;           (mapcar #'(lambda (time) (cut:force-ll
+;;                                     (re-pl-utils:pl-query (?o ?l) `("belief_at" ("loc" ?o ?l) ,time)
+;;                                       (list time ?o ?l))))
+;;                   int-time-lst)))
 
-(defun get-all-obj-pose-beliefs (int-time-lst)
-  (remove nil
-          (mapcar #'(lambda (time) (cut:force-ll
-                                    (re-pl-utils:pl-query (?o ?l) `("belief_at" ("loc" ?o ?l) ,time)
-                                      (list time ?o ?l))))
-                  int-time-lst)))
-
-(defun get-all-loc-changes (int-time-lst)
-  (remove nil
-          (mapcar #'(lambda (time) (cut:force-ll
-                                    (re-pl-utils:pl-query (?o) `("occurs" ("loc_change" ?o) ,time)
-                                      (list time ?o))))
-                  int-time-lst)))
+;; (defun get-all-loc-changes (int-time-lst)
+;;   (remove nil
+;;           (mapcar #'(lambda (time) (cut:force-ll
+;;                                     (re-pl-utils:pl-query (?o) `("occurs" ("loc_change" ?o) ,time)
+;;                                       (list time ?o))))
+;;                   int-time-lst)))
 
 (defun shorten-uri (uri)
   (subseq uri (1+ (position #\# uri))))
-
 
 (defun lispify-mongo-doc (doc &key (pkg *package*))
   (check-type doc cl-mongo:document)
@@ -120,21 +117,23 @@
        for val = (cl-mongo:get-element key doc)
      collect
        (cons (intern (string-upcase key) pkg)
-             (if (typep val 'cl-mongo:document)
-                 (lispify-mongo-doc val)
-                 val))))
+             (typecase val
+                 (cl-mongo:document
+                  (lispify-mongo-doc val))
+
+                 (list
+                  (mapcar #'lispify-mongo-doc val))
+
+                 (t val))
+             )))
 
 (defun mongo-get-designator (id &key (collection "logged_designators"))
   (let ((id (if (find #\# id)
                 (shorten-uri id)
                 id)))
     (let ((result (cl-mongo:docs
-                   (cl-mongo:db.find collection
-                                     ;; db layout was slightly changed
-                                     ;;(cl-mongo:kv "designator.__ID" id) :limit 0
-                                     (cl-mongo:kv "designator._id" id) :limit 0
-                                     ))))
-      (assert (<= (length result) 1))
+                   (cl-mongo:db.find collection (cl-mongo:kv "designator._id" id) :limit 0))))
+      (assert (<= (length result) 1) (result) "designator list is > 1: ~a" result)
       (if result
           (values (lispify-mongo-doc (car (cl-mongo:get-element "designator" result)))
                   (cl-mongo:bson-time-to-ut (cl-mongo:get-element "__recorded" (car result)))
@@ -179,135 +178,6 @@
 ;;     ;; (lift-trajectory (obj))
 ;;     ))
 
-;; assign create parameters for relational actions from designators via pattern matching
-;; TODO: convert to real designator and use CPL's predicates
-(crs:def-fact-group desig->predicates (mongo-desig-prop)
-  (crs:<- (mongo-desig-prop ?d (?prop ?val))
-    (crs:lisp-fun assoc ?prop ?d ?pair)
-    (crs:lisp-fun cdr ?pair ?pair-car )
-    (crs:equal ?pair-car ?val))
-
-  ;; extract parameters for navigation
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
-    (mongo-desig-prop ?mongo-desig (goal ?goal))
-
-    ;; for "to see" navs
-    (mongo-desig-prop ?goal (to "SEE"))
-    ;; for objects
-    (mongo-desig-prop ?goal (obj ?obj))
-    ;; of a specific type
-    ;; (mongo-desig-prop ?obj (type ?type))
-    ;; (crs:equal ?params (see ?type ))
-
-    ;; TODO: should operate on type
-    (mongo-desig-prop ?obj (name ?nm))
-    (crs:lisp-pred identity ?nm)
-    (crs:equal ?action (navigate-to-see ?nm)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
-    (mongo-desig-prop ?mongo-desig (goal ?goal))
-
-    ;; for "to see" navs
-    (mongo-desig-prop ?goal (to "REACH"))
-    ;; for objects
-    (mongo-desig-prop ?goal (obj ?obj))
-    ;; of a specific type
-    ;; (mongo-desig-prop ?obj (type ?type))
-    ;; (crs:equal ?params (see ?type ))
-
-    ;; TODO: should operate on type
-    (mongo-desig-prop ?obj (name ?nm))
-    (crs:lisp-pred identity ?nm)
-    (crs:equal ?action (navigate-to-see ?nm)))
-
-  ;; navigation with only cartesian goals
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
-    (mongo-desig-prop ?mongo-desig (goal ?goal))
-
-    (mongo-desig-prop ?goal (pose ?pose))
-    (mongo-desig-prop ?pose (pose ?p2))
-    (mongo-desig-prop ?p2 (position ?position))
-    (mongo-desig-prop ?position (x ?x))
-    (mongo-desig-prop ?position (y ?x))
-    (mongo-desig-prop ?position (z ?x))
-
-    (crs:lisp-pred identity ?x)
-    (crs:lisp-pred identity ?y)
-    (crs:lisp-pred identity ?z)
-
-    (crs:format "----------------------------~%")
-    ;; TODO: orientation
-    (crs:equal ?action (navigate (?x ?y ?z))))
-
-  ;; follow trajectory
-;;   (crs:<- (extract-relational ?mongo-desig ?action)
-;;     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-;;     (mongo-desig-prop ?mongo-desig (to "FOLLOW"))
-;;     (crs:equal ?action nil)
-;;     ;; problem: only fixed poses in follow-trajectory?
-;;     ;; how to get to the object?
-;; ;;    (mongo-desig-prop ?mongo-desig ())
-;;     )
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "PUT-DOWN"))
-    (mongo-desig-prop ?mongo-desig (obj ?obj))
-    (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (put-down ?obj-name)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "LIFT"))
-    (mongo-desig-prop ?mongo-desig (obj ?obj))
-    (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (lift ?obj-name)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "GRASP"))
-    (mongo-desig-prop ?mongo-desig (obj ?obj))
-    (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (grasp ?obj-name)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "PARK"))
-    (crs:equal ?action (park-arm)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "CARRY"))
-    (mongo-desig-prop ?mongo-desig (obj ?obj))
-    (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (carry-object ?obj-name)))
-
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (to "PERCEIVE"))
-    (mongo-desig-prop ?mongo-desig (obj ?obj))
-
-    (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (perceive ?obj-name)))
-
-
-  ;; actions without object names
-  ;; TODO
-
-  )
-
-(defun owl-desig->relational (owlid)
-  (let ((res
-         (mapcar #'(lambda (bdg)
-                     (cut:with-vars-strictly-bound (?action) bdg
-                       ?action))
-                 (cut:force-ll
-                  (crs:prolog `(extract-relational
-                                ,(mongo-get-designator owlid) ?action))))))
-    (car res)))
-
 
 ;; for now: consider only performactiondesignator elements as actions
 ;; (defun action-desig->relational (owl-id)
@@ -329,31 +199,31 @@
 ;;          ,params)
 ;;        (alexandria:hash-table-alist param-instances)))))
 
-(defun mongo-desig->predicate-list (desig &key (filter-properties nil))
-  (let* ((desig-type (cdr (assoc '_designator_type desig)))
-         (desig-identifier (gensym
-                            (if (null desig-type)
-                                "DESIG"
-                                (string-upcase desig-type))))
-         (filter-properties (append filter-properties '(_designator_type))))
-    (values
-     (append
-      `((,(intern (if (null desig-type)
-               "DESIGNATOR"
-               (string-upcase desig-type)))
-          ,desig-identifier))
-      (loop for desig-prop-pair in desig
-         for prop = (car desig-prop-pair)
-         for prop-val = (cdr desig-prop-pair)
-         unless (member prop filter-properties)
-         append
-           (if (listp prop-val)
-               (multiple-value-bind (pred-lst new-desig-id)
-                   (mongo-desig->predicate-list prop-val :filter-properties filter-properties)
-                 (append `((,prop ,desig-identifier ,new-desig-id))
-                         pred-lst))
-               (list (list prop desig-identifier prop-val)))))
-     desig-identifier)))
+;; (defun mongo-desig->predicate-list (desig &key (filter-properties nil))
+;;   (let* ((desig-type (cdr (assoc '_designator_type desig)))
+;;          (desig-identifier (gensym
+;;                             (if (null desig-type)
+;;                                 "DESIG"
+;;                                 (string-upcase desig-type))))
+;;          (filter-properties (append filter-properties '(_designator_type))))
+;;     (values
+;;      (append
+;;       `((,(intern (if (null desig-type)
+;;                "DESIGNATOR"
+;;                (string-upcase desig-type)))
+;;           ,desig-identifier))
+;;       (loop for desig-prop-pair in desig
+;;          for prop = (car desig-prop-pair)
+;;          for prop-val = (cdr desig-prop-pair)
+;;          unless (member prop filter-properties)
+;;          append
+;;            (if (listp prop-val)
+;;                (multiple-value-bind (pred-lst new-desig-id)
+;;                    (mongo-desig->predicate-list prop-val :filter-properties filter-properties)
+;;                  (append `((,prop ,desig-identifier ,new-desig-id))
+;;                          pred-lst))
+;;                (list (list prop desig-identifier prop-val)))))
+;;      desig-identifier)))
 
 (defun assert-single (asrt)
   (assert (= (length asrt) 1))
@@ -408,12 +278,12 @@
 ;;     ))
 
 ;; toplevel: cram_log:CRAMAchieve_AOXX3iUI
-(defun task-context (owl-id)
-  (let ((task-contexts
-         (re-pl-utils:owl-has-query :subject owl-id :predicate #"knowrob:taskContext")))
-    (loop for x in task-contexts
-         for (lit (tp_ type ctx)) = (car x)
-         collect ctx)))
+;; (defun task-context (owl-id)
+;;   (let ((task-contexts
+;;          (re-pl-utils:owl-has-query :subject owl-id :predicate #"knowrob:taskContext")))
+;;     (loop for x in task-contexts
+;;          for (lit (tp_ type ctx)) = (car x)
+;;          collect ctx)))
 ;; a "task" is a subclass of knowrob:CRAMEvent
 ;; (defun trace-task->relational (task-owl-id)
 ;;   )
@@ -442,31 +312,13 @@
               (get-subactions sa)))
         subactions)))
 
-
-
-
 (defun get-all-actions ()
   ;; for now, consider performactiondesignator as actions
   ;; the designator itself should be linked in the parent
   (all-owl-instances-of #"knowrob:PerformOnProcessModule"))
 
-(defun get-action-designator-for-perform-pm (owlid)
-  ;; search upwards for a performactiondesignator
-  (labels ((find-action-upwards (owlid &optional (depth 0))
-             (let ((parent
-                    ;; should be only one parent at max
-                    (assert-single-recursive
-                     (mapcar #'car
-                             (re-pl-utils:owl-has-query :predicate #"knowrob:subAction"
-                                                        :object owlid)))))
-               (if (re-pl-utils:is-individual-of parent #"knowrob:PerformActionDesignator")
-                   parent
-                   (find-action-upwards parent (1+ depth))))))
-    (let* ((performactiondesig (find-action-upwards owlid))
-           (desig-id
-            (assert-single-recursive (re-pl-utils:owl-has-query :subject performactiondesig
-                                                      :predicate #"knowrob:designator"))))
-      desig-id)))
+
+
 
 
 

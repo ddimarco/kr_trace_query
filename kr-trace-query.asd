@@ -7,15 +7,23 @@
   :depends-on (cram-json-prolog
                re-pl-utils
                cl-mongo
-               alexandria)
+               alexandria
+               local-time
+               cl-semantic-map-utils
+               cl-prada
+               pr2-reachability-costmap
+               visualization_msgs-msg)
   :components
   ((:module "src"
             :components
             ((:file "package")
              (:file "owl-read-macro" :depends-on ("package"))
-             (:file "sandbox" :depends-on ("owl-read-macro"))
+             (:file "time" :depends-on ("package"))
+             (:file "sandbox" :depends-on ("owl-read-macro" "time"))
              (:file "vistools" :depends-on ("sandbox"))
-             (:file "queries" :depends-on ("sandbox"))
+             (:file "extract-actions" :depends-on ("sandbox"))
+             (:file "queries" :depends-on ("extract-actions"))
+             (:file "rviz" :depends-on ("queries"))
              ))))
 
 

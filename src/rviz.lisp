@@ -65,14 +65,15 @@
                                   (cl-transforms:z dims))
                      :ns "semantic-map")))
 
-(defun make-manip-obj-marker (timestamp starting-id &key (task "http://ias.cs.tum.edu/kb/cram_log.owl#CRAMAction_xPY9fAsI"))
+(defun make-manip-obj-marker (timestamp starting-id experiment)
   (let ((id starting-id)
         (result))
-    (loop for obj in (unique-manip-objects-from-interval
-                      (timesteps-in-task task))
+    (loop for obj in (manipulation-objects experiment)
+       ;; (unique-manip-objects-from-interval
+                     ;;  (timesteps-in-task task))
        for obj-name = (slot-value obj 'name)
        for obj-pose = (mongo-obj-desig->pose
-                       (mng-latest-obj-name-perception obj-name timestamp))
+                       (mng-latest-obj-name-perception obj-name timestamp experiment))
        when obj-pose
          do
          (push (make-marker obj-pose id '(0 1 0) :cube :scale '(0.2 0.2 0.2) :ns "manip-obj") result)
@@ -85,14 +86,16 @@
   (roslisp:make-message "visualization_msgs/MarkerArray"
                          markers (map 'vector #'identity marker-list)))
 
-(defun visualize-timestamp (timestamp)
+(defun visualize-timestamp (timestamp experiment-trace)
   (when (null *vis-publisher*)
     (setf *vis-publisher* (roslisp:advertise "/visualization_marker_array"
                                              "visualization_msgs/MarkerArray")))
   (let (markers)
     (setf markers (make-robot-markers timestamp 0))
     (setf markers (append markers (make-semmap-object-markers (length markers))))
-    (setf markers (append markers (make-manip-obj-marker timestamp (length markers))))
+    (setf markers (append markers (make-manip-obj-marker timestamp (length markers) experiment-trace)))
+    (push (make-marker (cl-transforms:make-identity-pose) (length markers) '(1 0 0) :text_view_facing
+                       :text (shorten-uri timestamp)) markers)
     (roslisp:publish *vis-publisher*
                      (roslisp:make-message "visualization_msgs/MarkerArray"
                                    markers (map 'vector #'identity markers)))))
@@ -193,3 +196,11 @@
            (incf id))
 
       (roslisp:publish *vis-publisher* (make-marker-array mlist)))))
+
+
+(defun playback-experiment (experiment)
+  (dolist (ts (timesteps-between (start-time experiment) (end-time experiment)))
+    (visualize-timestamp ts experiment)
+    ;; (asdf:run-shell-command (format nil "scrot /tmp/experiment_~a.png" (timepoint-id->time ts))
+    ;; )
+    ))

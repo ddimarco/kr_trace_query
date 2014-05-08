@@ -4,3 +4,20 @@
   - (ql:quickload "cl-mongo")
     (use-package :cl-mongo)
   - sudo service mongodb start
+* mongo query:
+**   ;; (car (mapcar #'lispify-mongo-doc
+  ;;          (cl-mongo:docs
+  ;;           (cl-mongo:iter
+  ;;            (cl-mongo:db.sort "logged_designators"
+  ;;                              (cl-mongo:kv
+  ;;                               (cl-mongo:kv
+  ;;                                (cl-mongo:kv "designator._designator_type" "object")
+  ;;                                (cl-mongo:kv "designator.NAME" name))
+  ;;                               (cl-mongo:kv
+  ;;                                (cl-mongo:$<= "__recorded" (ensure-bson-time before))
+  ;;                                (cl-mongo:$>= "__recorded" (if after
+  ;;                                                               (ensure-bson-time after)
+  ;;                                                               (cl-mongo:date-time 0 0 0 1 1 1900)))))
+  ;;                              :field "__recorded"
+  ;;                              :asc nil
+  ;;                              :limit 0)))))

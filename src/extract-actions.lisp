@@ -4,6 +4,7 @@
 ;; assign create parameters for relational actions from designators via pattern matching
 ;; TODO: convert to real designator and use CPL's predicates
 ;; TODO: add timestamps to actions?
+;; TODO: knowrob:putdownlocation for putdown actions
 (crs:def-fact-group desig->predicates (mongo-desig-prop extract-relational)
   (crs:<- (mongo-desig-prop ?d (?prop ?val))
     (crs:lisp-pred listp ?d)

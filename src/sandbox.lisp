@@ -132,8 +132,9 @@
                 (shorten-uri id)
                 id)))
     (let ((result (cl-mongo:docs
-                   (cl-mongo:db.find collection (cl-mongo:kv "designator._id" id) :limit 0))))
-      (assert (<= (length result) 1) (result) "designator list is > 1: ~a" result)
+                   (cl-mongo:iter
+                    (cl-mongo:db.find collection (cl-mongo:kv "designator._id" id) :limit 0)))))
+      (assert (= (length result) 1) (result) "designator list is > 1: ~a" result)
       (if result
           (values (lispify-mongo-doc (car (cl-mongo:get-element "designator" result)))
                   (cl-mongo:bson-time-to-ut (cl-mongo:get-element "__recorded" (car result)))
@@ -228,6 +229,11 @@
 (defun assert-single (asrt)
   (assert (= (length asrt) 1))
   (car asrt))
+
+(defun assert-max-single (asrt)
+  (assert (<= (length asrt) 1))
+  (car asrt))
+
 (defun assert-single-recursive (asrt)
   (assert (= (length asrt) 1))
   (let ((head (car asrt)))

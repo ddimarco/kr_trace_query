@@ -22,7 +22,9 @@
              (:file "sandbox" :depends-on ("owl-read-macro" "time"))
              (:file "vistools" :depends-on ("sandbox"))
              (:file "extract-actions" :depends-on ("sandbox"))
+             (:file "worldstate" :depends-on ("extract-actions"))
              (:file "queries" :depends-on ("extract-actions"))
+             (:file "experiment" :depends-on ("queries"))
              (:file "rviz" :depends-on ("queries"))
              ))))
 

@@ -103,7 +103,8 @@
                                    markers (map 'vector #'identity markers)))))
 
 (defun visualize-action (popm-id exp-trace)
-  (destructuring-bind (start . end) (get-action-designator-time-interval popm-id)
+  (destructuring-bind (start . end)
+      (time-interval popm-id)
     (visualize-timestamp start exp-trace :start-id 0)
     (visualize-timestamp end exp-trace :start-id 500)))
 

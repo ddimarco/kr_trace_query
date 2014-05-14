@@ -1,10 +1,9 @@
 (in-package :kr-trace-query)
 
-;; (defun load-pick-trace ()
-;;   (re-pl-utils:load-owl-file "/home/marcodl/bremen_ws/src/data/packaging/pick.owl"))
-;; (defun load-pick-and-place-trace ()
-;;   ;; (re-pl-utils:load-owl-file "/home/marcodl/roslogs/exp-2014-02-25_12-54-56/pick-and-place.owl")
-;;   (json-prolog:prolog `("load_experiment" "/home/marcodl/roslogs/exp-2014-02-25_12-54-56/pick-and-place.owl")))
+;; cl-semantic-map-util:get-semantic-map to get map
+(crs:def-fact-group sem-map-stuff (cl-semantic-map-utils:semantic-map-name)
+  (crs:<- (cl-semantic-map-utils:semantic-map-name
+           "http://ias.cs.tum.edu/kb/ias_semantic_map.owl#SemanticEnvironmentMap_PM580j")))
 
 (defun load-experiment (&optional (exp "first-part-demo"))
   (json-prolog:prolog `("load_experiment" ,(format nil "/home/marcodl/roslogs/~a/cram_log.owl" exp))))
@@ -15,37 +14,13 @@
 (eval-when (:load-toplevel)
   (init-mongo-db))
 
-;;(defparameter *map-name* #"ias_semantic_map:SemanticEnvironmentMap_PM580j")
-;; cl-semantic-map-util:get-semantic-map to get map
-(crs:def-fact-group sem-map-stuff (cl-semantic-map-utils:semantic-map-name)
-  (crs:<- (cl-semantic-map-utils:semantic-map-name
-           "http://ias.cs.tum.edu/kb/ias_semantic_map.owl#SemanticEnvironmentMap_PM580j")))
-
 (defun init-kr ()
   (roslisp:start-ros-node "kr_trace_query")
   (json-prolog:prolog '("register_ros_package" "iai_maps"))
   (load-experiment)
   (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room"))
 
-(defun all-action-classes ()
-  (cut:with-vars-strictly-bound (?l)
-      (car (json-prolog:prolog-simple-1 "setof(C, T^task_class(T, C), L)"))
-    (re-pl-utils:pl-tree->string ?l)))
-
-(defun task-of-class (task-class)
- (re-pl-utils:pl-query (?t)
-     `("task_class" ?t ,task-class)
-   (re-pl-utils:pl-tree->string ?t)))
-
-(defun failures-with-task-class ()
-  (cut:force-ll (re-pl-utils:pl-query (?e ?c) '(and ("task_class" ?t ?c)
-                                                ("failure_task" ?e ?t))
-                    (cons
-                     (re-pl-utils:pl-tree->string ?c)
-                     (re-pl-utils:pl-tree->string ?e)))))
-
-(defmacro simple-pl-query (query)
-  `(cut:force-ll (json-prolog:prolog ,query :package ,*package*)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun all-owl-instances-of (cls)
   (cut:with-vars-strictly-bound (?l)
@@ -53,36 +28,73 @@
             (format nil "setof(I, owl_individual_of(I, '~a'), L)" cls)))
     (re-pl-utils:pl-tree->string ?l)))
 
-(defun all-objects ()
-  (all-owl-instances-of "http://ias.cs.tum.edu/kb/knowrob.owl#HumanScaleObject"))
-
 (defun all-time-steps ()
   (all-owl-instances-of "http://ias.cs.tum.edu/kb/knowrob.owl#TimePoint"))
 
-(defun all-perceptions ()
- (cut:force-ll
-  (json-prolog:prolog '(and
-                        ("owl_individual_of" ?b "http://ias.cs.tum.edu/kb/knowrob.owl#VisualPerception")
-                        ("returned_value" ?b ?o)))))
+(defun get-all-actions ()
+  ;; for now, consider performactiondesignator as actions
+  ;; the designator itself should be linked in the parent
+  (all-owl-instances-of #"knowrob:PerformOnProcessModule"))
 
-(defun all-designators ()
-  (all-owl-instances-of "http://ias.cs.tum.edu/kb/knowrob.owl#CRAMDesignator"))
+(defun shorten-uri (uri)
+  (subseq uri (1+ (position #\# uri))))
 
-(defun all-tasks ()
-  (mapcar #'(lambda (bdg)
-              (cut:with-vars-strictly-bound (?t) bdg
-                (re-pl-utils:pl-tree->string ?t)))
-          (cut:force-ll (json-prolog:prolog '("task" ?t)))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun start-end-task (tsk)
-  (re-pl-utils:pl-query (?start ?end)
-      `(and ("task_start" ,tsk ?start) ("task_end" ,tsk ?end))
-    (cons ?start ?end)))
+(defun assert-single (asrt)
+  (assert (= (length asrt) 1))
+  (car asrt))
+
+(defun assert-max-single (asrt)
+  (assert (<= (length asrt) 1))
+  (car asrt))
+
+(defun assert-single-recursive (asrt)
+  (assert (= (length asrt) 1))
+  (let ((head (car asrt)))
+    (if (listp head)
+        (assert-single head)
+        head)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun task-interval (task-id)
+  (assert-single
+   (cut:force-ll
+    (re-pl-utils:pl-query (?s ?e)
+        `(and ("task_start" ,task-id ?s)
+              ("task_end" ,task-id ?e))
+      (cons (re-pl-utils:pl-tree->string ?s)
+            (re-pl-utils:pl-tree->string ?e))))))
+
+(defun time-interval (owlid)
+  (let ((start-time (assert-single-recursive
+                     (re-pl-utils:owl-has-query :subject owlid
+                                                :predicate #"knowrob:startTime")))
+        (end-time (assert-single-recursive
+                   (re-pl-utils:owl-has-query :subject owlid
+                                              :predicate #"knowrob:endTime"))))
+    (cons start-time end-time)))
+
+(defun timesteps-between (start end)
+  (let ((timesteps (sort (all-time-steps) #'string<))
+        (int-start (timepoint-id->time start))
+        (int-end (timepoint-id->time end)))
+    (loop for ts in timesteps
+       for int-ts = (timepoint-id->time ts)
+         when (and (>= int-ts int-start)
+                   (<= int-ts int-end))
+         collect ts)))
+
+(defun timesteps-in-task (task-id)
+  (destructuring-bind (start . end)
+      (task-interval task-id)
+    (timesteps-between start end)))
 
 (defun sort-tasks (lst)
   (let ((start-end-map (make-hash-table :test #'equal)))
     (loop for tsk in lst
-         for se = (cut:force-ll (start-end-task tsk))
+         for se = (task-interval tsk)
          do
          (when (> (length se) 1)
            (roslisp:ros-warn () "more than one start-end pair found for ~a: ~a" tsk se)
@@ -92,24 +104,6 @@
                           (< (car (gethash tsk1 start-end-map))
                              (car (gethash tsk2 start-end-map))))))
     lst))
-
-
-;; (defun get-all-obj-pose-beliefs (int-time-lst)
-;;   (remove nil
-;;           (mapcar #'(lambda (time) (cut:force-ll
-;;                                     (re-pl-utils:pl-query (?o ?l) `("belief_at" ("loc" ?o ?l) ,time)
-;;                                       (list time ?o ?l))))
-;;                   int-time-lst)))
-
-;; (defun get-all-loc-changes (int-time-lst)
-;;   (remove nil
-;;           (mapcar #'(lambda (time) (cut:force-ll
-;;                                     (re-pl-utils:pl-query (?o) `("occurs" ("loc_change" ?o) ,time)
-;;                                       (list time ?o))))
-;;                   int-time-lst)))
-
-(defun shorten-uri (uri)
-  (subseq uri (1+ (position #\# uri))))
 
 (defun lispify-mongo-doc (doc &key (pkg *package*))
   (check-type doc cl-mongo:document)
@@ -159,74 +153,37 @@
                 (format nil "~a" (or type to)))
             pkg)))
 
-(defun owl-action-designator-p (owlid)
-  (eq (mongo-desig-type (mongo-get-designator (shorten-uri owlid)))
-                                 'action))
+(defun get-action-designator-for-perform-pm (owlid)
+  "Find a designator (which can then be read from mongodb) for the given
+ performonprocessmodule designator. Searches upwards the subAction predicate
+ until a performactiondesignator instance is found."
+  (labels ((find-action-upwards (owlid &optional (depth 0))
+             (let ((parent
+                    ;; should be only one parent at max
+                    (assert-single-recursive
+                     (mapcar #'car
+                             (re-pl-utils:owl-has-query :predicate #"knowrob:subAction"
+                                                        :object owlid)))))
+               (if (re-pl-utils:is-individual-of parent #"knowrob:PerformActionDesignator")
+                   parent
+                   (find-action-upwards parent (1+ depth))))))
+    (let* ((performactiondesig (find-action-upwards owlid))
+           (desig-id
+            (assert-single-recursive (re-pl-utils:owl-has-query :subject performactiondesig
+                                                                :predicate #"knowrob:designator"))))
+      desig-id)))
 
-(defun owl-get-all-action-designators ()
-  (let ((action-desig-ids
-         (remove-if (complement #'owl-action-designator-p)
-                    (all-designators))))
-    action-desig-ids))
-
-(defun assert-single (asrt)
-  (assert (= (length asrt) 1))
-  (car asrt))
-
-(defun assert-max-single (asrt)
-  (assert (<= (length asrt) 1))
-  (car asrt))
-
-(defun assert-single-recursive (asrt)
-  (assert (= (length asrt) 1))
-  (let ((head (car asrt)))
-    (if (listp head)
-        (assert-single head)
-        head)))
-
-(defun get-all-mongo-desigs (&key (type nil))
-  (let ((all
-         (mapcar #'mongo-get-designator (mapcar #'shorten-uri (all-designators)))))
-    (cond
-      (type
-       (remove-if (lambda (desig)
-                    (not (eq (mongo-desig-type desig) type)))
-                  all))
-      (t all))))
-
-;; get recursively all subactions
-(defun get-subactions (id &key (recursive t))
-  (check-type id string)
-  (let ((subactions
-         (mapcar #'car (re-pl-utils:owl-has-query
-                        :subject id
-                        :predicate #"knowrob:subAction"))))
-    (if recursive
-        (append
-         subactions
-         (loop for sa in subactions append
-              (get-subactions sa)))
-        subactions)))
-
-(defun get-all-actions ()
-  ;; for now, consider performactiondesignator as actions
-  ;; the designator itself should be linked in the parent
-  (all-owl-instances-of #"knowrob:PerformOnProcessModule"))
-
-
-
-
-
-
-;;(db.use "roslog")
-;;(pp (db.find "logged_designators" :all :selector (kv "__recorded" 1) :limit 0))
-;;(bson-time-to-ut (get-element "__recorded" (caadr (db.find "logged_designators" :all :selector (kv "__recorded" 1) :limit 1))))
-;; sort tasks time-wise and subtask-wise
-;; when are actions triggered?
-
-;; symbols from current package
-;; (do-all-symbols (s)
-;;   (when (eq (symbol-package s) *package*)
-;;     (print s)))
-;; (car (db.find "cities" (kv (kv "city" "ATLANTA") (kv "state" "GA"))  :limit 0))
-;; (pp (db.find "logged_designators" (kv "designator.TYPE" "CONTAINER") :limit 0))
+(defun owl-search-upwards (owlid &key (child-relation #"knowrob:subAction")
+                                  (predicate
+                                   (lambda (id)
+                                     (re-pl-utils:is-individual-of id #"knowrob:ArmMovement"))))
+  (labels ((find-upwards (owlid &optional (depth 0))
+             (let ((next
+                    (assert-single-recursive
+                     (mapcar #'car
+                             (re-pl-utils:owl-has-query :predicate child-relation
+                                                        :object owlid)))))
+               (if (funcall predicate next)
+                   next
+                   (find-upwards next (1+ depth))))))
+    (find-upwards owlid)))

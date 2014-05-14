@@ -9,7 +9,6 @@
 
 (defun shorten-owl-id (full)
   "converts a fully namespaced owl id to a shortened one. Should be used only for display."
-  ;; TODO: rather inefficient
   (let ((res
          (loop for key being the hash-keys of *owl-namespace-shortcuts*
             using (hash-value value)

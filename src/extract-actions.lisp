@@ -1,36 +1,77 @@
 (in-package :ktq)
 
-
 ;; assign create parameters for relational actions from designators via pattern matching
 ;; TODO: convert to real designator and use CPL's predicates
 ;; TODO: add timestamps to actions?
 ;; TODO: knowrob:putdownlocation for putdown actions
-(crs:def-fact-group desig->predicates (mongo-desig-prop extract-relational)
+(crs:def-fact-group desig->predicates (mongo-desig-prop extract-relational arm-movement-details)
   (crs:<- (mongo-desig-prop ?d (?prop ?val))
     (crs:lisp-pred listp ?d)
     (crs:lisp-fun assoc ?prop ?d ?pair)
     (crs:lisp-fun cdr ?pair ?pair-car )
     (crs:equal ?pair-car ?val))
 
+  ;; TODO: sometimes multiple arm movements
+  (crs:<- (arm-movement-details ?popmid ?details)
+    (crs:lisp-fun arm-movements-for-popm ?popmid ?movementids)
+    (crs:member ?mid ?movementids)
+    (crs:lisp-fun linked-designator ?mid #"knowrob:voluntaryMovementDetails" ?details-id)
+    (crs:lisp-fun mongo-get-designator ?details-id ?details))
+
+  (crs:<- (arm-used ?popmid ?arm)
+    (crs:findall ?details (arm-movement-details ?popmid ?details) ?all-details-lazy)
+    (crs:lisp-fun cut:force-ll ?all-details-lazy ?all-details)
+    (crs:lisp-fun length ?all-details ?len)
+
+    (crs:or
+     (crs:-> (crs:> ?len 1)
+             (crs:equal ?arm both))
+     (crs:-> (crs:< ?len 1)
+             (crs:equal ?arm none))
+     (crs:-> (crs:and (crs:== ?len 1)
+                      (crs:lisp-fun car ?all-details ?d1)
+                      (mongo-desig-prop ?d1 (PLANNING-GROUP "left_arm")))
+             (crs:equal ?arm left))
+          (crs:-> (crs:and (crs:== ?len 1)
+                      (crs:lisp-fun car ?all-details ?d1)
+                      (mongo-desig-prop ?d1 (PLANNING-GROUP "right_arm")))
+             (crs:equal ?arm right))))
+
+  (crs:<- (extract-at-object ?obj ?direction ?object-parameter)
+    (crs:or
+     (crs:-> (crs:and
+              (mongo-desig-prop ?obj (name ?nm))
+              (crs:lisp-pred identity ?nm))
+             (crs:and
+              (crs:equal ?object-parameter ?nm)
+              (crs:equal ?direction center)))
+     (crs:-> (crs:and
+              (mongo-desig-prop ?obj (at ?where))
+              (mongo-desig-prop ?where (on ?on-obj))
+              (mongo-desig-prop ?where (name ?on-obj-name-str1))
+              (crs:lisp-fun string-upcase ?on-obj-name-str1 ?on-obj-name-str)
+              (crs:lisp-pred identity ?on-obj-name-str)
+              (crs:lisp-fun intern ?on-obj-name-str ?on-obj-name))
+             (crs:and
+              (crs:equal ?object-parameter ?on-obj-name)
+              (crs:equal ?direction on))))
+    )
+
   ;; extract parameters for navigation
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
     (mongo-desig-prop ?mongo-desig (goal ?goal))
-
     ;; for "to see" navs
     (mongo-desig-prop ?goal (to "SEE"))
     ;; for objects
     (mongo-desig-prop ?goal (obj ?obj))
-    ;; of a specific type
-    ;; (mongo-desig-prop ?obj (type ?type))
-    ;; (crs:equal ?params (see ?type ))
 
-    ;; TODO: should operate on type
-    (mongo-desig-prop ?obj (name ?nm))
-    (crs:lisp-pred identity ?nm)
-    (crs:equal ?action (navigate-to-see ?nm)))
+    (extract-at-object ?obj ?dir ?object-parameter)
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+    (crs:equal ?action (navigate-to-see ?dir
+                        ?object-parameter)))
+
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
     (mongo-desig-prop ?mongo-desig (goal ?goal))
 
@@ -45,27 +86,29 @@
     ;; TODO: should operate on type
     (mongo-desig-prop ?obj (name ?nm))
     (crs:lisp-pred identity ?nm)
-    (crs:equal ?action (navigate-to-see ?nm)))
+    (crs:equal ?action (navigate-to-reach ?nm)))
 
   ;; navigation with only cartesian goals
-  (crs:<- (extract-relational ?mongo-desig ?action)
-    (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
-    (mongo-desig-prop ?mongo-desig (goal ?goal))
+  ;; (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
+  ;;   (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
+  ;;   (mongo-desig-prop ?mongo-desig (goal ?goal))
 
-    (mongo-desig-prop ?goal (pose ?pose))
-    (mongo-desig-prop ?pose (pose ?p2))
-    (mongo-desig-prop ?p2 (position ?position))
-    (mongo-desig-prop ?position (x ?x))
-    (mongo-desig-prop ?position (y ?x))
-    (mongo-desig-prop ?position (z ?x))
+  ;;   ;; (mongo-desig-prop ?goal (pose ?pose))
+  ;;   ;; (mongo-desig-prop ?pose (pose ?p2))
+  ;;   ;; (mongo-desig-prop ?p2 (position ?position))
+  ;;   ;; (mongo-desig-prop ?position (x ?x))
+  ;;   ;; (mongo-desig-prop ?position (y ?x))
+  ;;   ;; (mongo-desig-prop ?position (z ?x))
 
-    (crs:lisp-pred identity ?x)
-    (crs:lisp-pred identity ?y)
-    (crs:lisp-pred identity ?z)
+  ;;   ;; (crs:lisp-pred identity ?x)
+  ;;   ;; (crs:lisp-pred identity ?y)
+  ;;   ;; (crs:lisp-pred identity ?z)
 
-    (crs:format "----------------------------~%")
-    ;; TODO: orientation
-    (crs:equal ?action (navigate (?x ?y ?z))))
+  ;;   (crs:format "~a~%" ?goal)
+  ;;   ;; TODO: orientation
+  ;;   (crs:equal ?action (navigate somewhere
+  ;;                       ;; (?x ?y ?z)
+  ;;                                )))
 
   ;; follow trajectory
 ;;   (crs:<- (extract-relational ?mongo-desig ?action)
@@ -77,63 +120,74 @@
 ;; ;;    (mongo-desig-prop ?mongo-desig ())
 ;;     )
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "PUT-DOWN"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (put-down ?obj-name)))
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+    (arm-used ?popm-id ?arm)
+    (crs:equal ?action (put-down ?obj-name ?arm)))
+
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "LIFT"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (lift ?obj-name)))
+    (arm-used ?popm-id ?arm)
+    (crs:equal ?action (lift ?obj-name ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "GRASP"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (grasp ?obj-name)))
+    (arm-used ?popm-id ?arm)
+    (crs:equal ?action (grasp ?obj-name ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  ;; FIXME: is always :none
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "PARK"))
-    (crs:equal ?action (park-arm)))
+    (arm-used ?popm-id ?arm)
+    (crs:equal ?action (park-arm ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "CARRY"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
-    (crs:equal ?action (carry-object ?obj-name)))
+    (arm-used ?popm-id ?arm)
+    (crs:equal ?action (carry-object ?obj-name ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?action)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action)
     (mongo-desig-prop ?mongo-desig (to "PERCEIVE"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
 
     (mongo-desig-prop ?obj (name ?obj-name))
+    ;; FIXME: what if no object name?
+    (crs:lisp-pred identity ?obj-name)
     (crs:equal ?action (perceive ?obj-name)))
 
-
-  ;; actions without object names
-  ;; TODO
-
+  ;; FIXME: actions without object names
   )
 
+;; grasp: "http://ias.cs.tum.edu/kb/cram_log.owl#PerformOnProcessModule_6tqgTSvV"
 
-(defun owl-desig->relational (owlid)
+(defun owl-desig->relational (popm-id)
   "Convert a action designator owl id into a relational action."
-  (let ((res
-         (mapcar #'(lambda (bdg)
-                     (cut:with-vars-strictly-bound (?action) bdg
-                       ?action))
-                 (cut:force-ll
-                  (crs:prolog `(extract-relational
-                                ,(mongo-get-designator owlid) ?action))))))
-    (car res)))
+  (car (mapcar #'(lambda (bdg)
+               (cut:with-vars-strictly-bound (?action) bdg
+                 ;; HACK: convert object ids to symbols
+                 (mapcar (lambda (x) (if (stringp x)
+                                         (intern x)
+                                         x))
+                         ?action)))
+           (cut:force-ll
+            (crs:prolog `(extract-relational
+                          ,(mongo-get-designator (get-action-designator-for-perform-pm popm-id))
+                          ,popm-id
+                          ?action))))))
 
 (defun get-action-designator-for-perform-pm (owlid)
   "Find a designator (which can then be read from mongodb) for the given
@@ -155,6 +209,23 @@
                                                                 :predicate #"knowrob:designator"))))
       desig-id)))
 
+(defun owl-search-upwards (owlid &key (child-relation #"knowrob:subAction")
+                                  (predicate
+                                   (lambda (id)
+                                     (re-pl-utils:is-individual-of id #"knowrob:ArmMovement"))))
+  (labels ((find-upwards (owlid &optional (depth 0))
+             (let ((next
+                    (assert-single-recursive
+                     (mapcar #'car
+                             (re-pl-utils:owl-has-query :predicate child-relation
+                                                        :object owlid)))))
+               (if (funcall predicate next)
+                   next
+                   (find-upwards next (1+ depth))))))
+    (find-upwards owlid)))
+
+
+
 ;;;; get world state
 ;; need to get *all* objects and their state at the action start time
 ;; also take the information from the action designators themselves?
@@ -168,66 +239,8 @@
     (cons start-time end-time)))
 
 
+
 ;; FIXME: some timestamps in designators seem off -> expected for static ones (timestamp=0)
-
-;; TODO: we might want a cache, similar to the cl-tf one for faster lookups
-;; (defun get-transform (from to timestamp)
-;;   (let ((doc (car (last
-;;                    (cl-mongo:docs
-;;                     (cl-mongo:db.sort "tf"
-;;                                       (cl-mongo:$em "transforms"
-;;                                                     (cl-mongo:kv
-;;                                                      (cl-mongo:kv
-;;                                                       (cl-mongo:kv "child_frame_id" to)
-;;                                                       (cl-mongo:kv "header.frame_id" from))
-;;                                                      (cl-mongo:$<= "header.stamp" timestamp)))
-;;                                       :field "header.stamp"
-;;                                       :limit 0))))))
-;;     ;; check if last timestamp is bigger than 1 hour
-;;     (if (null doc)
-;;         nil
-;;         (let ((stamp-local (bson->local (assert-single (cl-mongo:get-element "transforms.header.stamp"
-;;                                                                              doc))))
-;;               (min-time-ok (local-time:timestamp- (bson->local timestamp) 1 :hour)))
-;;           ;; (assert (local-time:timestamp> stamp-local min-time-ok))
-;;           (when (local-time:timestamp> stamp-local min-time-ok)
-;;             (error
-;;              (format nil
-;;                      "time difference between requested and latest found transform is too big: ~a"
-;;                      stamp-local)))
-;;           (cl-transforms:make-transform
-;;            (cl-transforms:make-3d-vector
-;;             (assert-single (cl-mongo:get-element "transforms.transform.translation.x" doc))
-;;             (assert-single (cl-mongo:get-element "transforms.transform.translation.y" doc))
-;;             (assert-single (cl-mongo:get-element "transforms.transform.translation.z" doc)))
-;;            (cl-transforms:make-quaternion
-;;             (assert-single (cl-mongo:get-element "transforms.transform.rotation.x" doc))
-;;             (assert-single (cl-mongo:get-element "transforms.transform.rotation.y" doc))
-;;             (assert-single (cl-mongo:get-element "transforms.transform.rotation.z" doc))
-;;             (assert-single (cl-mongo:get-element "transforms.transform.rotation.w" doc))))))))
-
-;; (defun tf-mongo-query (start-time end-time frame child-frame)
-;;   (cl-mongo:db.find "tf"
-;;                     (cl-mongo:$em "transforms"
-;;                                   (cl-mongo:kv
-;;                                    ;; frames
-;;                                    (cl-mongo:kv
-;;                                     (cl-mongo:kv "child_frame_id" child-frame)
-;;                                     (cl-mongo:kv "header.frame_id" frame))
-;;                                    ;; time interval
-;;                                    (cl-mongo:kv
-;;                                     (cl-mongo:$> "header.stamp" start-time)
-;;                                     (cl-mongo:$<= "header.stamp" end-time))))
-;;                     :limit 0))
-
-;; need the robot state: arms, base, head?
-;; (defun robot-state-between (start end)
-;;   (let ((start-loc (local->bson-time (owl-time->local start)))
-;;         (end-loc (local->bson-time (owl-time->local end))))
-;;     (tf-mongo-query start-loc end-loc "/map" "/odom_combined")
-;;     ))
-
-
 
 
 ;; (mapcar #'lispify-mongo-doc (cl-mongo:docs (tf-mongo-query (cl-mongo:date-time 0 0 0 19 2 2014) (cl-mongo:date-time 0 0 12 19 2 2014) "/map" "/odom_combined")))

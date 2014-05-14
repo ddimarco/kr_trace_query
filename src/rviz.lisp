@@ -86,19 +86,29 @@
   (roslisp:make-message "visualization_msgs/MarkerArray"
                          markers (map 'vector #'identity marker-list)))
 
-(defun visualize-timestamp (timestamp experiment-trace)
+(defun visualize-timestamp (timestamp experiment-trace &key (start-id 0))
   (when (null *vis-publisher*)
     (setf *vis-publisher* (roslisp:advertise "/visualization_marker_array"
                                              "visualization_msgs/MarkerArray")))
   (let (markers)
-    (setf markers (make-robot-markers timestamp 0))
-    (setf markers (append markers (make-semmap-object-markers (length markers))))
-    (setf markers (append markers (make-manip-obj-marker timestamp (length markers) experiment-trace)))
-    (push (make-marker (cl-transforms:make-identity-pose) (length markers) '(1 0 0) :text_view_facing
+    (setf markers (make-robot-markers timestamp start-id))
+    (setf markers (append markers (make-semmap-object-markers (+ start-id (length markers)))))
+    (setf markers (append markers (make-manip-obj-marker timestamp (+ start-id (length markers))
+                                                         experiment-trace)))
+    (push (make-marker (cl-transforms:make-identity-pose) (+ start-id (length markers))
+                       '(1 0 0) :text_view_facing
                        :text (shorten-uri timestamp)) markers)
     (roslisp:publish *vis-publisher*
                      (roslisp:make-message "visualization_msgs/MarkerArray"
                                    markers (map 'vector #'identity markers)))))
+
+(defun visualize-action (popm-id exp-trace)
+  (destructuring-bind (start . end) (get-action-designator-time-interval popm-id)
+    (visualize-timestamp start exp-trace :start-id 0)
+    (visualize-timestamp end exp-trace :start-id 500)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; reachability
 
 (defun hue2rgb (v1 v2 h)
   (when (< h 0)
@@ -142,7 +152,10 @@
 ;; FIXME: robot pose vis seems to be off, compared to baselink -> map transform
 ;; (show-reachability :left :starting-id 420 :transform (lookup-mongo-transform  "/map" "/torso_lift_link"  "http://ias.cs.tum.edu/kb/cram_log.owl#timepoint_1396513242"))
 (defun show-reachability (side &key (starting-id 0)
+                                 (timestamp nil)
                                  (transform (cl-transforms:make-identity-transform)))
+  (when (stringp timestamp)
+    (setf transform (lookup-mongo-transform  "/map" "/torso_lift_link" timestamp)))
   (let* ((map (pr2-reachability-costmap:get-reachability-map side))
          (minimum (pr2-reachability-costmap:minimum map))
          (maximum (pr2-reachability-costmap:maximum map))

@@ -124,8 +124,7 @@
                  (list
                   (mapcar #'lispify-mongo-doc val))
 
-                 (t val))
-             )))
+                 (t val)))))
 
 (defun mongo-get-designator (id &key (collection "logged_designators"))
   (let ((id (if (find #\# id)
@@ -170,62 +169,6 @@
                     (all-designators))))
     action-desig-ids))
 
-;; (defparameter *action-predicate-params*
-;;   '( (perceive (obj))
-;;     ;; (follow-trajectory (pose))
-;;     ;; (navigation (goal))
-;;     ;; (carry-trajectory (obj))
-;;     ;; (grasp-trajectory (obj))
-;;     ;; (lift-trajectory (obj))
-;;     ))
-
-
-;; for now: consider only performactiondesignator elements as actions
-;; (defun action-desig->relational (owl-id)
-;;   (let* ((mongo-desig (mongo-get-designator owl-id))
-;;          (predicate (mongo-desig->action-predicate-name mongo-desig))
-;;          (param-symbols (cadr (assoc predicate *action-predicate-params*)))
-;;          (param-instances (make-hash-table)))
-;;     (let ((params
-;;            ;; (loop for ps in param-symbols
-;;            ;;    for ps-instance = (gensym "INSTANCE")
-;;            ;;    for ps-sexp = (assoc ps mongo-desig)
-;;            ;;    do
-;;            ;;      (setf (gethash ps-instance param-instances) ps-sexp)
-;;            ;;    collect
-;;            ;;    ps-instance)
-;;             ))
-;;       (values
-;;        `(,predicate
-;;          ,params)
-;;        (alexandria:hash-table-alist param-instances)))))
-
-;; (defun mongo-desig->predicate-list (desig &key (filter-properties nil))
-;;   (let* ((desig-type (cdr (assoc '_designator_type desig)))
-;;          (desig-identifier (gensym
-;;                             (if (null desig-type)
-;;                                 "DESIG"
-;;                                 (string-upcase desig-type))))
-;;          (filter-properties (append filter-properties '(_designator_type))))
-;;     (values
-;;      (append
-;;       `((,(intern (if (null desig-type)
-;;                "DESIGNATOR"
-;;                (string-upcase desig-type)))
-;;           ,desig-identifier))
-;;       (loop for desig-prop-pair in desig
-;;          for prop = (car desig-prop-pair)
-;;          for prop-val = (cdr desig-prop-pair)
-;;          unless (member prop filter-properties)
-;;          append
-;;            (if (listp prop-val)
-;;                (multiple-value-bind (pred-lst new-desig-id)
-;;                    (mongo-desig->predicate-list prop-val :filter-properties filter-properties)
-;;                  (append `((,prop ,desig-identifier ,new-desig-id))
-;;                          pred-lst))
-;;                (list (list prop desig-identifier prop-val)))))
-;;      desig-identifier)))
-
 (defun assert-single (asrt)
   (assert (= (length asrt) 1))
   (car asrt))
@@ -240,59 +183,6 @@
     (if (listp head)
         (assert-single head)
         head)))
-
-;; (defun get-action-desig-outcome (owl-id)
-;;   (let ((all-times (sort-times (all-time-steps)))
-;;         (end-time (assert-single (find-action-desig-time owl-id :end t))))
-;;     (let ((tpos (position end-time all-times :test #'equal)))
-;;       (setf all-times (subseq all-times tpos)))
-
-;;     (loop for time in all-times
-;;        for starting-actions = (remove-if
-;;                                (complement #'owl-action-designator-p)
-;;                                (apply #'append
-;;                                 (re-pl-utils:owl-has-query :predicate #"knowrob:startTime"
-;;                                                            :object time))))))
-
-;; (defun find-action-desig-time (owl-id &key (end t))
-;;   ;; action designators usually don't have children
-;;   (let ((end-time
-;;          (if end
-;;              (re-pl-utils:owl-has-query :subject owl-id :predicate
-;;                                         #"knowrob:endTime")
-;;              (re-pl-utils:owl-has-query :subject owl-id :predicate
-;;                                         #"knowrob:startTime"))))
-;;     (if end-time
-;;         (mapcar #'car end-time)
-;;         (let ((parents (re-pl-utils:owl-has-query :predicate #"knowrob:designator" :object owl-id)))
-;;           (remove-duplicates
-;;            (loop for p in parents
-;;               append (find-action-desig-time (car p)))
-;;            :test #'equal)
-;;           ))))
-
-;; (defun timesteps-after (timestep)
-;;   (let ((all-times (sort-times (all-time-steps))))
-;;     (subseq all-times (1+ (position timestep all-times :test #'equal)))))
-
-;; #"cram_log:timepoint_1378119230"
-;; (defun world-state-at (time)
-;;   (let ((starting-actions (mapcar #'car (re-pl-utils:owl-has-query
-;;                                          :predicate #"knowrob:startTime"
-;;                                          :object time))))
-;;     starting-actions
-;;     ))
-
-;; toplevel: cram_log:CRAMAchieve_AOXX3iUI
-;; (defun task-context (owl-id)
-;;   (let ((task-contexts
-;;          (re-pl-utils:owl-has-query :subject owl-id :predicate #"knowrob:taskContext")))
-;;     (loop for x in task-contexts
-;;          for (lit (tp_ type ctx)) = (car x)
-;;          collect ctx)))
-;; a "task" is a subclass of knowrob:CRAMEvent
-;; (defun trace-task->relational (task-owl-id)
-;;   )
 
 (defun get-all-mongo-desigs (&key (type nil))
   (let ((all

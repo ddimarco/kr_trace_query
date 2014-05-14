@@ -1,5 +1,14 @@
 (in-package :ktq)
 
+(defparameter *experiment* nil)
+(defparameter *prada-experiences* nil)
+(defun run-extraction (&optional (root "http://ias.cs.tum.edu/kb/cram_log.owl#CRAMAction_xPY9fAsI") )
+  (setf *experiment*
+        (make-instance 'experiment-trace
+                       :root-owlid root
+                       :semantic-map (cl-semantic-map-utils:get-semantic-map)))
+  (setf *prada-experiences* (full-prada-trace *experiment*)))
+
 ;; q: task(T), task_goal(T, '(OBJECT-PLACED-AT ?OBJ ?LOC)'), task_start(T, S), task_end(T, E), add_trajectory('/base_link', S, E, 1.0).
 ;; text: PR2's path during a pick-and-place sequence
 
@@ -18,10 +27,7 @@
 ;; FIXME: odom_combined <-> base_link
 (defun robot-pose (owl-time)
   (cl-transforms:transform->pose
-   (lookup-mongo-transform "/map"
-                           ;; "/odom_combined"
-                           "/base_link"
-                           owl-time)))
+   (lookup-mongo-transform "/map" "/base_link" owl-time)))
 
 (defun robot-gripper-pose (side owl-time)
   (cl-transforms:transform->pose
@@ -67,23 +73,6 @@
   (destructuring-bind (start . end)
       (task-interval task-id)
     (timesteps-between start end)))
-
-;; (defun plot-robot-poses (&optional (timesteps (all-time-steps)))
-;;   (with-open-file (plot-file "/tmp/robot-poses.dat" :direction :output :if-exists :supersede)
-;;     (loop for ts in timesteps
-;;        for pose = (robot-pose ts)
-;;        for pos = (if pose
-;;                      (cl-transforms:origin pose)
-;;                      nil)
-;;        when pos do
-;;          (format plot-file "~a ~a ~a~%" (cl-transforms:x pos)
-;;                  (cl-transforms:y pos)
-;;                  (shorten-uri ts)))))
-
-;; (defun all-sem-objects-in-room (room-id)
-;;   (alexandria:flatten
-;;    (cut:force-ll (re-pl-utils:pl-query (?o) `("map_root_objects" ,room-id ?o)
-;;                    (re-pl-utils:pl-tree->string ?o)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -176,9 +165,7 @@
                   'in-front-of)
               (if name
                   name)
-              (->relational-id fb-obj)))
-
-     )))
+              (->relational-id fb-obj))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -283,10 +270,15 @@
        (mapcar (lambda (bdg)
                  (cut:with-vars-bound (?spec) bdg
                    ?spec))
-               (cut:force-ll (crs:prolog `(mongo-desig-pose-rel ,mng-desig ?spec)))))))
+               (remove nil (cut:force-ll
+                            (crs:prolog `(mongo-desig-pose-rel ,mng-desig ?spec))))))))
 
 ;; TODO: in-gripper!!!!
 ;; db.logged_designators.find({"designator._designator_type" : "object", "designator.NAME" : "PANCAKEMIX0", "designator.AT.IN" : "GRIPPER"}).pretty()
+;; (defparameter *ids* (mapcar (lambda (doc)
+;;                (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
+;;                (cl-mongo:docs (cl-mongo:db.find "logged_designators" (cl-mongo:kv "designator.AT.IN" "GRIPPER") :limit 0))))
+
 (crs:def-fact-group mng-desig->qualitative-pos (mongo-desig-pose-rel mongo-desig-pose)
   (crs:<- (mongo-desig-pose-rel ?desig ?res)
     (mongo-desig-prop ?desig (at ?spec))
@@ -299,13 +291,15 @@
              (and
               (crs:bound ?res1)
               (crs:equal ?res1 ?res)
-              (crs:format "got qualitative: ~a!~%" ?res1)))
+              (crs:format "got qualitative: ~a!~%" ?res1)
+              (crs:cut)))
 
      (crs:-> (mongo-desig-has-quantitative-at ?obj-name ?spec ?res2)
              (and
               (crs:bound ?res2)
               (crs:equal ?res2 ?res)
-              (crs:format "got quantitative: ~a!~%" ?res2)))))
+              ))
+     ))
 
   (crs:<- (mongo-desig-has-qualitative-at ?obj-name ?desig ?res)
     (mongo-desig-prop ?desig (on ?sth))
@@ -358,7 +352,6 @@
      (pr2-reachability-costmap:get-reachability-map side)
      (cl-transforms:transform-pose map->tll pose))))
 
-;; FIXME: timestamp is "before" -> problem with outcomes?
 (defun manip-object-world-state (timestamp unique-manip-obj exp-trace)
   (mng-extract-pose-relation
    (mng-latest-obj-name-perception (slot-value unique-manip-obj 'name) timestamp
@@ -366,6 +359,8 @@
 
 (defun all-manip-objects-world-state (timestamp exp-trace)
   (append
+   (loop for x in '(center on left right both none)
+        collect (list (intern (format nil "~a-CONSTANT" x)) x))
    ;; type declarations
    (loop for obj in (manipulation-objects exp-trace)
       collect (list (intern (slot-value obj 'type))
@@ -396,7 +391,34 @@
       when (> in-reach-left 0)
       collect (list 'reachable-left obj-symbol)
         when (> in-reach-right 0)
-        collect (list 'reachable-right obj-symbol))))
+        collect (list 'reachable-right obj-symbol))
+   ))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; find error for action
+;; TODO: parameters?
+(defun action-failure (popm-id)
+  (let ((failure (assert-max-single
+                  (alexandria:flatten
+                   (re-pl-utils:owl-has-query :subject popm-id
+                                              :predicate #"knowrob:eventFailure")))))
+    (if failure
+        (let ((type-id
+               (assert-single
+                (remove #"owl:namedIndividual" (re-pl-utils:rdf-type failure) :test #'equal))))
+          (loop for c across (shorten-uri type-id)
+             for i from 0
+             with res = ()
+             do
+               (when (and (> i 0) (upper-case-p c))
+                 (push #\- res))
+               (push (char-upcase c) res)
+             finally (return (intern (coerce (nreverse res) 'string))))))))
+
+;; HACK: I get multiple instances of the same failure, at different levels in the tree
+(defun failures-at-time (ts)
+  (cut:force-ll (json-prolog:prolog `(and ("failure_attribute" ?failure  ,#"knowrob:startTime" ,ts)
+                                          ("failure_class" ?failure ?fclass)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -438,7 +460,7 @@
   "only keep actions which can be converted to a relational form"
   (remove-if (lambda (actionid)
                (not (identity
-                 (owl-desig->relational (get-action-designator-for-perform-pm actionid)))))
+                 (owl-desig->relational actionid))))
              (get-all-actions)))
 
 (defun world-state-before-action (popm-id exp-trace)
@@ -451,27 +473,84 @@
 (defun world-state-after-action (popm-id exp-trace)
   (destructuring-bind (start . end)
       (task-interval popm-id)
-    (append
-     ;; TODO: timestamp +1?
-     (all-manip-objects-world-state end exp-trace)
-     (robot-world-state-at end (semantic-map exp-trace)))))
+    (remove nil
+     (append
+      ;; TODO: timestamp +1?
+      (all-manip-objects-world-state end exp-trace)
+      (robot-world-state-at end (semantic-map exp-trace))
+      (let ((af (action-failure popm-id)))
+        (if af
+            (list (list af))))))))
 
-;; FIXME: prada needs to take previous state - action - next state instead of
-;; assuming a continuous world
+;; NOTE: prada needs to be set to use state - action - state data
 (defun make-learn-instance (popm-id exp-trace)
   (make-instance 'cl-prada::prada-learn-state
                  :world (world-state-before-action popm-id exp-trace)
-                 :action (owl-desig->relational (get-action-designator-for-perform-pm popm-id))
-                 ))
+                 :action (owl-desig->relational popm-id)
+                 :world-after (world-state-after-action popm-id exp-trace)))
 
-(defun print-all-actions (exp-trace)
-  (dolist (action (usable-actions))
-    (format t "~a~%~a~%~a~%~%" (world-state-before-action action exp-trace)
-            (owl-desig->relational (get-action-designator-for-perform-pm action))
-            (world-state-after-action action exp-trace))))
+(defun full-prada-trace (experiment)
+  (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment))))
+    (loop for action in (usable-actions)
+       for start-time = (assert-single-recursive
+                         (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:startTime"))
+       for end-time = (assert-single-recursive
+                         (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:endTime"))
+         when (and (member start-time timestamps :test #'equal)
+                   (member end-time timestamps :test #'equal))
+       collect
+         (make-learn-instance action experiment))))
+
+(defun prada-symbol-defs-from-learn-data (data)
+  (let ((symbol-hash (make-hash-table)))
+    (labels ((add-symbol-def (name type params)
+             (let ((old-def (gethash name symbol-hash)))
+               (if (null old-def)
+                   (setf (gethash name symbol-hash) (list type params))
+                   (destructuring-bind (otype oparams) old-def
+                     (assert (and (eq otype type)
+                                  (= oparams params)))))))
+
+             (add-symbol-def-ws (ws)
+               (dolist (asrt ws)
+                 (add-symbol-def (car asrt) 'cl-prada::primitive (1- (length asrt))))))
+      (loop for d in data
+         for action = (slot-value d 'cl-prada::action)
+         for world-before = (slot-value d 'cl-prada::world)
+         for world-after = (slot-value d 'cl-prada::world-after)
+         do
+           (add-symbol-def (car action) 'cl-prada::action (1- (length action)))
+           (add-symbol-def-ws world-before)
+           (add-symbol-def-ws world-after))
+      (loop for key being the hash-keys of symbol-hash
+         using (hash-value value)
+         for (type param-count) = value
+         collect
+           (cl-prada::make-symbol-def `(,type ,key ,param-count))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun tasks-of-type-within-interval (owl-type timesteps)
+  (cut:force-ll
+   (re-pl-utils:pl-query (?t)
+       `(and ("owl_individual_of" ?t ,owl-type)
+             ("task_start" ?t ?s) ("task_end" ?t ?e)
+             ("member" ?s ',timesteps)
+             ("member" ?e ',timesteps))
+     (re-pl-utils:prolog->string ?t))))
 
+(defun linked-designator (task-id owl-predicate)
+  (assert-single-recursive
+   (re-pl-utils:owl-has-query :subject task-id :predicate owl-predicate)))
+
+(defun arm-movements-for-popm (owlid)
+  (assert-max-single
+   (cut:force-ll (re-pl-utils:pl-query (?l)
+                     `("setof" ?t (and ("subtask_all" ,owlid ?t)
+                                       ("owl_individual_of" ?t #"knowrob:ArmMovement"))
+                               ?l)
+                   (re-pl-utils:pl-tree->string ?l)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; q:
 ;; findall([Obj, E],
 ;;  ((task_end(T,E), task_class(T,knowrob:'UIMAPerception'), rdf_has(T, knowrob:'perceptionResult', Obj))),
@@ -511,3 +590,13 @@
 ;; add_object_with_children(pr2:'PR2Robot1',S).
 ;; text:
 ;; What is the trajectory of the arm during the pouring Action?
+
+
+;; (defun all-mongo-designators (experiment)
+;;   (cl-mongo:docs
+;;    (cl-mongo:iter
+;;     (cl-mongo:db.find "logged_designators"
+;;                       (cl-mongo:kv
+;;                        (cl-mongo:$>= "__recorded" (owl-time->bson (start-time experiment)))
+;;                        (cl-mongo:$<= "__recorded" (owl-time->bson (end-time experiment))))
+;;                       :limit 0))))

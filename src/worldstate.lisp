@@ -1,5 +1,7 @@
 (in-package :kr-trace-query)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defun lookup-mongo-transform (from to owl-time)
   (if (string= from to)
       (cl-transforms:make-identity-transform)
@@ -25,44 +27,30 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun z-relation (p1 p2)
+(defun axis-relation (axis-function p1 p2)
   (with-slots ((o1 cl-transforms:origin)) p1
     (with-slots ((o2 cl-transforms:origin)) p2
-      (- (cl-transforms:z o1) (cl-transforms:z o2)))))
-
-(defun y-relation (p1 p2)
-  (with-slots ((o1 cl-transforms:origin)) p1
-    (with-slots ((o2 cl-transforms:origin)) p2
-      (- (cl-transforms:y o2) (cl-transforms:y o1)))))
-
-(defun x-relation (p1 p2)
-  (with-slots ((o1 cl-transforms:origin)) p1
-    (with-slots ((o2 cl-transforms:origin)) p2
-      (- (cl-transforms:x o2) (cl-transforms:x o1)))))
-
+      (- (funcall axis-function o2) (funcall axis-function o1)))))
 
 (defun get-minimal-distance-relation (pose map-parts)
   ;; assuming everything in map frame
   (let ((rel-distances
          (loop for mp in map-parts
             for mp-pose = (cl-semantic-map-utils:pose mp)
-            for left = (y-relation pose mp-pose)
-            for above = (z-relation pose mp-pose)
-            for behind = (x-relation pose mp-pose)
+            for left = (axis-relation #'cl-transforms:y pose mp-pose)
+            for above = (axis-relation #'cl-transforms:z pose mp-pose)
+            for behind = (axis-relation #'cl-transforms:x pose mp-pose)
             collect
               (list
                (if (> left 0)
-                   (cons :left left)
-                   (cons :right (- left)))
+                   (cons 'left-of left)
+                   (cons 'right-of (- left)))
                (if (> above 0)
-                   (cons :above above)
-                   (cons :below (- above)))
+                   (cons 'above-of above)
+                   (cons 'below-of (- above)))
                (if (> behind 0)
-                   (cons :behind behind)
-                   (cons :in-front (- behind)))
+                   (cons 'behind-of behind)
+                   (cons 'in-front-of (- behind)))
                mp))))
     ;; just take the one with the minimal distance
     (loop for ((lr-dir . lr-dist) (tb-dir . tb-dist) (fb-dir . fb-dist) mp) in rel-distances
@@ -87,38 +75,19 @@
                  (caddr min-fb) mp))
        finally (return (list min-lr min-tb min-fb)))))
 
-
 ;; TODO: would probably be better to use a viewpoint from the robot instead of from the map origin
 (defun discretize-pose (pose semantic-map &key name)
-  (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
-      (get-minimal-distance-relation pose (cl-semantic-map-utils:semantic-map-parts semantic-map))
-    (list
-     (remove nil
-             (list
-              (if (eq :left lr-dir)
-                  'left-of
-                  'right-of)
-              (if name
-                  name)
-              (->relational-id lr-obj)))
-
-     (remove nil
-             (list
-              (if (eq :above tb-dir)
-                  'above-of
-                  'below-of)
-              (if name
-                  name)
-              (->relational-id tb-obj)))
-
-     (remove nil
-             (list
-              (if (eq :behind fb-dir)
-                  'behind-of
-                  'in-front-of)
-              (if name
-                  name)
-              (->relational-id fb-obj))))))
+  (flet ((make-relation (dir obj )
+           (list
+            dir
+            name
+            (->relational-id obj))))
+    (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
+        (get-minimal-distance-relation pose (cl-semantic-map-utils:semantic-map-parts semantic-map))
+      (list
+       (make-relation lr-dir lr-obj)
+       (make-relation tb-dir tb-obj)
+       (make-relation fb-dir fb-obj)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -155,8 +124,6 @@
                                (let ((n1 (cdr (assoc prop m1)))
                                      (n2 (cdr (assoc prop m2))))
                                  (equal n1 n2))))))
-
-
 
 (defclass manip-object ()
   ;; TODO: handles etc?
@@ -217,8 +184,6 @@
                         name))
         return mng-desig)))
 
-
-
 ;; TODO: suddenly appearing manipulation objects? -> vien
 (defun mng-extract-pose-relation (mng-desig)
   "extracts the pose from a designator retrieved from mongodb."
@@ -235,7 +200,6 @@
 ;; (defparameter *ids* (mapcar (lambda (doc)
 ;;                (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
 ;;                (cl-mongo:docs (cl-mongo:db.find "logged_designators" (cl-mongo:kv "designator.AT.IN" "GRIPPER") :limit 0))))
-
 (crs:def-fact-group mng-desig->qualitative-pos (mongo-desig-pose-rel mongo-desig-pose)
   (crs:<- (mongo-desig-pose-rel ?desig ?res)
     (mongo-desig-prop ?desig (at ?spec))
@@ -293,8 +257,6 @@
     (mongo-desig-prop ?desig (at ?spec))
     (mongo-desig-prop ?spec (_designator_type "LOCATION"))
     (mongo-desig-pose ?spec ?pose)))
-
-
 
 (defun mongo-obj-desig->pose (mng-desig)
   (if mng-desig

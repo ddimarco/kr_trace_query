@@ -11,10 +11,12 @@
 
 ;; NOTE: prada needs to be set to use state - action - state data
 (defun make-learn-instance (popm-id exp-trace)
-  (make-instance 'cl-prada::prada-learn-state
-                 :world (world-state-before-action popm-id exp-trace)
-                 :action (owl-desig->relational popm-id)
-                 :world-after (world-state-after-action popm-id exp-trace)))
+  (multiple-value-bind (action additional-assertions)
+      (owl-desig->relational popm-id)
+    (make-instance 'cl-prada::prada-learn-state
+                   :world (append (world-state-before-action popm-id exp-trace) additional-assertions)
+                   :action action
+                   :world-after (append (world-state-after-action popm-id exp-trace) additional-assertions))))
 
 (defun full-prada-trace (experiment)
   (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment))))

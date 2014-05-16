@@ -54,26 +54,28 @@
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (crs:<- (create-pose-object ?desig ?object-name ?object-assertions)
+  (crs:<- (create-pose-object ?desig ?object-name ?timestamp ?object-assertions)
     (crs:lisp-fun gensym "LOCATION" ?object-name)
     (crs:format "creating new location object~%")
-    (mongo-desig-has-quantitative-at ?object-name ?desig ?object-loc-assertions)
+    (mongo-desig-has-quantitative-at ?object-name ?timestamp ?desig ?object-loc-assertions)
     (crs:lisp-fun append ((location ?object-name)) ?object-loc-assertions ?object-assertions)
     )
 
-  (crs:<- (object-name ?desig ?name ?additional-assertions)
+  (crs:<- (object-name ?desig ?name ?timestamp ?additional-assertions)
     ;; use the referenced object name in the designator
     (mongo-desig-prop ?desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?name))
     (crs:lisp-pred identity ?name)
     (crs:equal ?additional-assertions nil))
 
-  ;; TODO: also for object types?
-
-  (crs:<- (object-name ?desig ?name ?additional-assertions)
+  (crs:<- (object-name ?desig ?name ?timestamp ?additional-assertions)
     ;; create a new location designator
     (crs:and (mongo-desig-prop ?desig (obj ?obj)) (crs:lisp-pred null ?obj))
-    (create-pose-object ?desig ?name ?additional-assertions))
+    (create-pose-object ?desig ?name ?timestamp ?additional-assertions))
+
+    ;; TODO: also for object types?
+  ;; (crs:<- (object-name ?desig ?name ?additional-assertions)
+  ;;   )
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -105,7 +107,7 @@
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id  ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (to "PERCEIVE"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
 
@@ -114,7 +116,7 @@
     (crs:equal ?action (perceive ?dir ?obj-parameter)))
 
   ;; extract parameters for navigation
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id  ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
     (mongo-desig-prop ?mongo-desig (goal ?goal))
     (mongo-desig-prop ?goal (to "SEE"))
@@ -122,7 +124,7 @@
     (extract-at-object ?obj ?dir ?object-parameter ?additional)
     (crs:equal ?action (navigate-to-see ?dir ?object-parameter)))
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
     (mongo-desig-prop ?mongo-desig (goal ?goal))
     (mongo-desig-prop ?goal (to "REACH"))
@@ -131,34 +133,32 @@
     (crs:equal ?action (navigate-to-reach ?dir ?object-parameter)))
 
   ;; navigation with only cartesian goals
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "NAVIGATION"))
     (mongo-desig-prop ?mongo-desig (goal ?goal))
     (crs:and (mongo-desig-prop ?goal (to ?to)) (crs:lisp-pred null ?to))
-    (object-name ?goal ?goal-name ?additional)
+    (object-name ?goal ?goal-name ?timestamp ?additional)
     (crs:equal ?action (navigate ?goal-name)))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    ;; follow trajectory
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "FOLLOW"))
-    (object-name ?mongo-desig ?name ?additional)
+    (object-name ?mongo-desig ?name ?timestamp ?additional)
     (crs:equal (follow-trajectory ?name) ?action))
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "PUT-DOWN"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
-
     (crs:equal ?additional nil)
-
     (arm-used ?popm-id ?arm)
     (crs:equal ?action (put-down ?obj-name ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "LIFT"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
@@ -167,7 +167,7 @@
     (crs:equal ?additional nil)
     (crs:equal ?action (lift ?obj-name ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "GRASP"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
@@ -177,14 +177,14 @@
     (crs:equal ?action (grasp ?obj-name ?arm)))
 
   ;; FIXME: is always :none
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "PARK"))
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
     (crs:equal ?action (park-arm ?arm)))
 
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?action ?additional)
+  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "CARRY"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
@@ -203,7 +203,7 @@
   )
 
 ;; grasp: "http://ias.cs.tum.edu/kb/cram_log.owl#PerformOnProcessModule_6tqgTSvV"
-(defun owl-desig->relational (popm-id)
+(defun owl-desig->relational (popm-id timestamp)
   "Convert a action designator owl id into a relational action."
   (let ((bdg (assert-max-single
               (cut:force-ll
@@ -212,6 +212,7 @@
                   ,(mongo-get-designator
                     (get-action-designator-for-perform-pm popm-id))
                   ,popm-id
+                  ,timestamp
                   ?action
                   ?additional))))))
     (if bdg

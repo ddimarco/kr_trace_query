@@ -23,9 +23,9 @@
              (:file "vistools" :depends-on ("sandbox"))
              (:file "extract-actions" :depends-on ("sandbox"))
              (:file "worldstate" :depends-on ("extract-actions"))
-             (:file "queries" :depends-on ("extract-actions"))
-             (:file "experiment" :depends-on ("queries"))
-             (:file "rviz" :depends-on ("queries"))
+             (:file "prada-interface" :depends-on ("extract-actions"))
+             (:file "experiment" :depends-on ("prada-interface"))
+             (:file "rviz" :depends-on ("experiment"))
              ))))
 
 

@@ -2,15 +2,21 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defparameter *transform-cache* (make-hash-table :test #'equal))
+
 (defun lookup-mongo-transform (from to owl-time)
-  (if (string= from to)
-      (cl-transforms:make-identity-transform)
-      (let ((poses (cut:force-ll
-                    (re-pl-utils:pl-query (?l)
-                        `("mng_lookup_transform" ,from ,to ,owl-time ?l)
-                      (cl-transforms:pose->transform
-                       (re-pl-utils:pl-matrix->pose ?l))))))
-        (assert-single poses))))
+  (let ((key (list from to owl-time)))
+    (when (null (gethash key *transform-cache*))
+      (setf (gethash key *transform-cache*)
+            (if (string= from to)
+                (cl-transforms:make-identity-transform)
+                (let ((poses (cut:force-ll
+                              (re-pl-utils:pl-query (?l)
+                                  `("mng_lookup_transform" ,from ,to ,owl-time ?l)
+                                (cl-transforms:pose->transform
+                                 (re-pl-utils:pl-matrix->pose ?l))))))
+                  (assert-single poses)))))
+    (gethash key *transform-cache*)))
 
 ;; FIXME: odom_combined <-> base_link
 (defun robot-pose (owl-time)
@@ -32,58 +38,58 @@
     (with-slots ((o2 cl-transforms:origin)) p2
       (- (funcall axis-function o2) (funcall axis-function o1)))))
 
-(defun get-minimal-distance-relation (pose map-parts)
+(defparameter *distances* nil)
+
+(defun get-minimal-distance-relation (pose timestamp map-parts)
   ;; assuming everything in map frame
-  (let ((rel-distances
-         (loop for mp in map-parts
-            for mp-pose = (cl-semantic-map-utils:pose mp)
-            for left = (axis-relation #'cl-transforms:y pose mp-pose)
-            for above = (axis-relation #'cl-transforms:z pose mp-pose)
-            for behind = (axis-relation #'cl-transforms:x pose mp-pose)
-            collect
-              (list
-               (if (> left 0)
-                   (cons 'left-of left)
-                   (cons 'right-of (- left)))
-               (if (> above 0)
-                   (cons 'above-of above)
-                   (cons 'below-of (- above)))
-               (if (> behind 0)
-                   (cons 'behind-of behind)
-                   (cons 'in-front-of (- behind)))
-               mp))))
-    ;; just take the one with the minimal distance
-    (loop for ((lr-dir . lr-dist) (tb-dir . tb-dist) (fb-dir . fb-dist) mp) in rel-distances
-       for dist = (cl-transforms:v-dist (cl-transforms:origin pose)
-                                        (cl-transforms:origin (cl-semantic-map-utils:pose mp)))
-       with min-lr = (list :left 1000 nil)
-       with min-tb = (list :below 1000 nil)
-       with min-fb = (list :behind 1000 nil)
-       for i from 0
-       do
-         (when (< dist (cadr min-lr))
-           (setf (car min-lr) lr-dir
-                 (cadr min-lr) dist
-                 (caddr min-lr) mp))
-         (when (< dist (cadr min-tb))
-           (setf (car min-tb) tb-dir
-                 (cadr min-tb) dist
-                 (caddr min-tb) mp))
-         (when (< dist (cadr min-fb))
-           (setf (car min-fb) fb-dir
-                 (cadr min-fb) dist
-                 (caddr min-fb) mp))
-       finally (return (list min-lr min-tb min-fb)))))
+  (let ((pose (map->robot-frame pose timestamp)))
+    (let ((rel-distances
+           (loop for mp in map-parts
+              for mp-pose = (map->robot-frame (cl-semantic-map-utils:pose mp) timestamp)
+              for left = (axis-relation #'cl-transforms:y pose mp-pose)
+              for above = (axis-relation #'cl-transforms:z pose mp-pose)
+              for behind = (axis-relation #'cl-transforms:x pose mp-pose)
+              collect
+                (list
+                 (if (> left 0)
+                     (cons 'left-of left)
+                     (cons 'right-of (- left)))
+                 (if (> above 0)
+                     (cons 'above-of above)
+                     (cons 'below-of (- above)))
+                 (if (> behind 0)
+                     (cons 'behind-of behind)
+                     (cons 'in-front-of (- behind)))
+                 mp))))
+      ;; just take the one with the minimal distance
+      (loop for ((lr-dir . lr-dist) (tb-dir . tb-dist) (fb-dir . fb-dist) mp) in rel-distances
+         for dist = (cl-transforms:v-dist (cl-transforms:origin pose)
+                                          (cl-transforms:origin (cl-semantic-map-utils:pose mp)))
+         with min-lr = (list :left 1000 nil)
+         with min-tb = (list :below 1000 nil)
+         with min-fb = (list :behind 1000 nil)
+         for i from 0
+         do
+           (when (< dist (cadr min-lr))
+             (setf (car min-lr) lr-dir
+                   (cadr min-lr) dist
+                   (caddr min-lr) mp))
+           (when (< dist (cadr min-tb))
+             (setf (car min-tb) tb-dir
+                   (cadr min-tb) dist
+                   (caddr min-tb) mp))
+           (when (< dist (cadr min-fb))
+             (setf (car min-fb) fb-dir
+                   (cadr min-fb) dist
+                   (caddr min-fb) mp))
+         finally (return (list min-lr min-tb min-fb))))))
 
 ;; TODO: would probably be better to use a viewpoint from the robot instead of from the map origin
-(defun discretize-pose (pose semantic-map &key name)
-  (flet ((make-relation (dir obj )
-           (list
-            dir
-            name
-            (->relational-id obj))))
+(defun discretize-pose (pose semantic-map time &key name)
+  (flet ((make-relation (dir obj)
+           (list dir name (->relational-id obj))))
     (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
-        (get-minimal-distance-relation pose (cl-semantic-map-utils:semantic-map-parts semantic-map))
+        (get-minimal-distance-relation pose time (cl-semantic-map-utils:semantic-map-parts semantic-map))
       (list
        (make-relation lr-dir lr-obj)
        (make-relation tb-dir tb-obj)
@@ -106,9 +112,11 @@
 
 ;; TODO: robot-at, gripper-at predicates, parking positions
 (defun robot-world-state-at (owl-time semantic-map)
-  (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map :name 'pr2))
-        (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map :name 'lgripper))
-        (rgripper (discretize-pose (robot-gripper-pose :right owl-time) semantic-map :name 'rgripper)))
+  (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map owl-time :name 'pr2))
+        (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map owl-time
+                                   :name 'lgripper))
+        (rgripper (discretize-pose (robot-gripper-pose :right owl-time) semantic-map owl-time
+                                   :name 'rgripper)))
     (append
      '((robot pr2)
        (gripper-left lgripper)
@@ -178,14 +186,15 @@
           :key (lambda (task-desig-pair)
                  (cdr (task-interval (cdr task-desig-pair)))))))
     (loop for (desig . task) in desigs
-       for (mng-desig time collection) = (multiple-value-list (mongo-get-designator desig))
+;;       for (mng-desig time collection) = (multiple-value-list (mongo-get-designator desig))
+       for mng-desig = (mongo-get-designator desig)
        when (and mng-desig
                  (equal (cdr (assoc 'name mng-desig))
                         name))
         return mng-desig)))
 
 ;; TODO: suddenly appearing manipulation objects? -> vien
-(defun mng-extract-pose-relation (mng-desig)
+(defun mng-extract-pose-relation (mng-desig owl-time)
   "extracts the pose from a designator retrieved from mongodb."
   (if mng-desig
       (assert-single
@@ -193,43 +202,51 @@
                  (cut:with-vars-bound (?spec) bdg
                    ?spec))
                (remove nil (cut:force-ll
-                            (crs:prolog `(mongo-desig-pose-rel ,mng-desig ?spec))))))))
+                            (crs:prolog `(mongo-desig-pose-rel ,mng-desig ,owl-time ?spec))))))))
 
 ;; TODO: in-gripper!!!!
 ;; db.logged_designators.find({"designator._designator_type" : "object", "designator.NAME" : "PANCAKEMIX0", "designator.AT.IN" : "GRIPPER"}).pretty()
 ;; (defparameter *ids* (mapcar (lambda (doc)
 ;;                (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
 ;;                (cl-mongo:docs (cl-mongo:db.find "logged_designators" (cl-mongo:kv "designator.AT.IN" "GRIPPER") :limit 0))))
+
+;; (defparameter *poses-cache* nil)
+;; (defun cache-pose (pose)
+;;   (push pose *poses-cache*))
+
+(defparameter *poses* nil)
+(defun cache-pose (obj time pose)
+  (push (list obj time pose) *poses*))
+
 (crs:def-fact-group mng-desig->qualitative-pos (mongo-desig-pose-rel mongo-desig-pose)
-  (crs:<- (mongo-desig-pose-rel ?desig ?res)
+  (crs:<- (mongo-desig-pose-rel ?desig ?owl-time ?res)
     (mongo-desig-prop ?desig (at ?spec))
     (mongo-desig-prop ?spec (_designator_type "LOCATION"))
     (mongo-desig-prop ?desig (name ?obj-name-str))
     (crs:lisp-fun intern ?obj-name-str ?obj-name)
 
     (crs:or
-     (crs:-> (mongo-desig-has-qualitative-at ?obj-name ?spec ?res1)
+     (crs:-> (mongo-desig-has-qualitative-at ?obj-name ?owl-time ?spec ?res1)
              (and
               (crs:bound ?res1)
               (crs:equal ?res1 ?res)
               (crs:format "got qualitative: ~a!~%" ?res1)
-              (crs:cut)))
+              ;; (crs:cut)
+              ))
 
-     (crs:-> (mongo-desig-has-quantitative-at ?obj-name ?spec ?res2)
+     (crs:-> (mongo-desig-has-quantitative-at ?obj-name ?owl-time ?spec ?res2)
              (and
               (crs:bound ?res2)
-              (crs:equal ?res2 ?res)
-              ))
-     ))
+              (crs:equal ?res2 ?res)))))
 
-  (crs:<- (mongo-desig-has-qualitative-at ?obj-name ?desig ?res)
+  (crs:<- (mongo-desig-has-qualitative-at ?obj-name ?owl-time ?desig ?res)
     (mongo-desig-prop ?desig (on ?sth))
     (mongo-desig-prop ?desig (name ?nme))
     (crs:lisp-pred identity ?nme)
     (crs:lisp-pred identity ?sth)
     (crs:equal ?res (on ?obj-name ?nme)))
 
-  (crs:<- (mongo-desig-has-qualitative-at ?obj-name ?desig ?res)
+  (crs:<- (mongo-desig-has-qualitative-at ?obj-name ?owl-time ?desig ?res)
     (mongo-desig-prop ?desig (in ?sth))
     (crs:lisp-pred identity ?sth)
     (crs:equal ?res (in ?obj-name ?sth)))
@@ -246,10 +263,13 @@
     (crs:lisp-fun cl-transforms:make-quaternion ?ox ?oy ?oz ?ow ?quaternion)
     (crs:lisp-fun cl-transforms:make-pose ?origin ?quaternion ?resulting-pose))
 
-  (crs:<- (mongo-desig-has-quantitative-at ?obj-name ?desig ?res)
+  (crs:<- (mongo-desig-has-quantitative-at ?obj-name ?owl-time ?desig ?res)
     (mongo-desig-pose ?desig ?obj-pose)
+    ;; (crs:lisp-fun cache-pose ?obj-name nil ?obj-pose ?_)
+    ;; (crs:format "~a~%" ?desig)
+    ;; (crs:lisp-fun cache-pose ?obj-pose ?_)
     (crs:lisp-fun cl-semantic-map-utils:get-semantic-map ?semmap)
-    (crs:lisp-fun discretize-pose ?obj-pose ?semmap :name ?obj-name ?res))
+    (crs:lisp-fun discretize-pose ?obj-pose ?semmap ?owl-time :name ?obj-name ?res))
 
   ;; to extract a pose from an object designator
   ;; TODO: unify with above stuff
@@ -273,10 +293,15 @@
      (pr2-reachability-costmap:get-reachability-map side)
      (cl-transforms:transform-pose map->tll pose))))
 
+(defun map->robot-frame (pose owl-time)
+  (let ((map->bl (lookup-mongo-transform "/base_link" "/map" owl-time)))
+    (cl-transforms:transform-pose map->bl pose)))
+
 (defun manip-object-world-state (timestamp unique-manip-obj exp-trace)
   (mng-extract-pose-relation
    (mng-latest-obj-name-perception (slot-value unique-manip-obj 'name) timestamp
-                                   exp-trace)))
+                                   exp-trace)
+   timestamp))
 
 (defun all-manip-objects-world-state (timestamp exp-trace)
   (append
@@ -312,8 +337,12 @@
       when (> in-reach-left 0)
       collect (list 'reachable-left obj-symbol)
         when (> in-reach-right 0)
-        collect (list 'reachable-right obj-symbol))
+      collect (list 'reachable-right obj-symbol)
+      do
+        (cache-pose obj-symbol timestamp obj-pose))
    ))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; find error for action
@@ -359,3 +388,20 @@
       (let ((af (action-failure popm-id)))
         (if af
             (list (list af))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (defun in-gripper-within-experiment (experiment)
+;;   (let ((all-desigs (mapcar
+;;                      (lambda (doc)
+;;                        ;; concatenate
+;;                        ;; 'string
+;;                        ;; #"cram_log:"
+;;                        (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
+;;                      (cl-mongo:docs
+;;                       (cl-mongo:db.find "logged_designators"
+;;                                         (cl-mongo:kv "designator.OBJ.AT.IN" "GRIPPER") :limit 0))))
+;;         (experiment-ts (timesteps-between (start-time experiment) (end-time experiment))))
+;;     all-desigs))
+
+;; example for new desig format: (mongo-get-designator "designator_iKFiq84q0W3wCn")

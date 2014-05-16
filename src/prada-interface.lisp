@@ -6,17 +6,19 @@
   "only keep actions which can be converted to a relational form"
   (remove-if (lambda (actionid)
                (not (identity
-                 (owl-desig->relational actionid))))
+                     (owl-desig->relational actionid (car (task-interval actionid))))))
              (get-all-actions)))
 
 ;; NOTE: prada needs to be set to use state - action - state data
-(defun make-learn-instance (popm-id exp-trace)
+(defun make-learn-instance (popm-id timestamp exp-trace)
   (multiple-value-bind (action additional-assertions)
-      (owl-desig->relational popm-id)
+      (owl-desig->relational popm-id timestamp)
     (make-instance 'cl-prada::prada-learn-state
-                   :world (append (world-state-before-action popm-id exp-trace) additional-assertions)
+                   :world (append (world-state-before-action popm-id exp-trace)
+                                  additional-assertions)
                    :action action
-                   :world-after (append (world-state-after-action popm-id exp-trace) additional-assertions))))
+                   :world-after (append (world-state-after-action popm-id exp-trace)
+                                        additional-assertions))))
 
 (defun full-prada-trace (experiment)
   (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment))))
@@ -28,7 +30,7 @@
          when (and (member start-time timestamps :test #'equal)
                    (member end-time timestamps :test #'equal))
        collect
-         (make-learn-instance action experiment))))
+         (make-learn-instance action start-time experiment))))
 
 (defun prada-symbol-defs-from-learn-data (data)
   (let ((symbol-hash (make-hash-table)))

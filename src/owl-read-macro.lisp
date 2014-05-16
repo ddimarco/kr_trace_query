@@ -48,6 +48,9 @@
   (register-owl-namespace "owl" "http://www.w3.org/2002/07/owl")
   (register-owl-namespace "xsd" "http://www.w3.org/2001/XMLSchema")
   (register-owl-namespace "ias_semantic_map" "http://ias.cs.tum.edu/kb/ias_semantic_map.owl")
+  (register-owl-namespace "srdl2comp" "http://ias.cs.tum.edu/kb/srdl2-comp.owl")
+  (register-owl-namespace "srdl2cap" "http://ias.cs.tum.edu/kb/srdl2-cap.owl")
+  (register-owl-namespace "pr2" "http://ias.cs.tum.edu/kb/PR2.owl" )
   (set-dispatch-macro-character #\# #\" #'owl-symbol-reader))
 
 ;; (defun test-namespace-reader ()

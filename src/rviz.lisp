@@ -76,9 +76,11 @@
                        (mng-latest-obj-name-perception obj-name timestamp experiment))
        when obj-pose
          do
-         (push (make-marker obj-pose id '(0 1 0) :cube :scale '(0.2 0.2 0.2) :ns "manip-obj") result)
+         (push (make-marker obj-pose id '(0 1 0) :cube :scale '(0.2 0.2 0.2) :ns "manip-obj")
+               result)
          (incf id)
-         (push (make-marker obj-pose id '(1 0 0) :text_view_facing :text obj-name :ns "manip-obj") result)
+         (push (make-marker obj-pose id '(1 0 0) :text_view_facing :text obj-name :ns "manip-obj")
+               result)
          (incf id))
     result))
 

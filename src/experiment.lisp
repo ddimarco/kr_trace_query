@@ -2,7 +2,10 @@
 
 (defparameter *experiment* nil)
 (defparameter *prada-experiences* nil)
-(defun run-extraction (&optional (root "http://ias.cs.tum.edu/kb/cram_log.owl#CRAMAction_xPY9fAsI") )
+(defun run-extraction (&optional (root
+                                  #"cram_log:CRAMAction_EGYg8xlT"
+                                  ;;"http://ias.cs.tum.edu/kb/cram_log.owl#CRAMAction_xPY9fAsI"
+                                  ) )
   (setf *experiment*
         (make-instance 'experiment-trace
                        :root-owlid root

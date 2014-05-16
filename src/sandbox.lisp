@@ -5,7 +5,7 @@
   (crs:<- (cl-semantic-map-utils:semantic-map-name
            "http://ias.cs.tum.edu/kb/ias_semantic_map.owl#SemanticEnvironmentMap_PM580j")))
 
-(defun load-experiment (&optional (exp "first-part-demo"))
+(defun load-experiment (exp)
   (json-prolog:prolog `("load_experiment" ,(format nil "/home/marcodl/roslogs/~a/cram_log.owl" exp))))
 
 (defun init-mongo-db ()
@@ -14,12 +14,74 @@
 (eval-when (:load-toplevel)
   (init-mongo-db))
 
-(defun init-kr ()
+(defun init-kr (&optional (exp "neu"))
   (roslisp:start-ros-node "kr_trace_query")
   (json-prolog:prolog '("register_ros_package" "iai_maps"))
-  (load-experiment)
-  (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room"))
+  (load-experiment exp)
+  (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room")
+  (re-pl-utils:load-local-owl-file "mod_srdl" "owl" "PR2")
+  )
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (defun filter-prada-states-for (action states)
+;;   (remove-if (lambda (ps)
+;;                (eq (car (slot-value ps 'cl-prada::action)))
+;;                ))
+;;   )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Code from Paradigms of AI Programming
+;;;; Copyright (c) 1991 Peter Norvig
+;;; ==============================
+;;;; The Memoization facility:
+;; (defmacro defun-memo (fn args &body body)
+;;   "Define a memoized function."
+;;   `(memoize (defun ,fn ,args . ,body)))
+
+;; (defun memo (fn &key (key #'first) (test #'eql) name)
+;;   "Return a memo-function of fn."
+;;   (let ((table (make-hash-table :test test)))
+;;     (setf (get name :memo) table)
+;;     #'(lambda (&rest args)
+;;         (let ((k (funcall key args)))
+;;           (multiple-value-bind (val found-p)
+;;               (gethash k table)
+;;             (if found-p val
+;;                 (setf (gethash k table) (apply fn args))))))))
+
+;; (defun memoize (fn-name &key (key #'first) (test #'eql))
+;;   "Replace fn-name's global definition with a memoized version."
+;;   (clear-memoize fn-name)
+;;   (setf (symbol-function fn-name)
+;;         (memo (symbol-function fn-name)
+;;               :name fn-name :key key :test test)))
+
+;; (defun clear-memoize (fn-name)
+;;   "Clear the hash table from a memo function."
+;;   (let ((table (get fn-name 'memo)))
+;;     (when table (clrhash table))))
+
+;; uncached:
+;; Evaluation took:
+;;   206.296 seconds of real time
+;;   47.014938 seconds of total run time (43.566723 user, 3.448215 system)
+;;   [ Run times consist of 1.288 seconds GC time, and 45.727 seconds non-GC time. ]
+;;   22.79% CPU
+;;   63,504 forms interpreted
+;;   493,987,422,870 processor cycles
+;;   3,761,738,288 bytes consed
+
+;; first run with caching:
+;; Evaluation took:
+;;   177.835 seconds of real time
+;;   33.778111 seconds of total run time (31.253953 user, 2.524158 system)
+;;   [ Run times consist of 1.012 seconds GC time, and 32.767 seconds non-GC time. ]
+;;   18.99% CPU
+;;   76,464 forms interpreted
+;;   48 lambdas converted
+;;   425,836,908,818 processor cycles
+;;   3,005,614,432 bytes consed
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun all-owl-instances-of (cls)

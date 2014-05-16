@@ -38,8 +38,6 @@
     (with-slots ((o2 cl-transforms:origin)) p2
       (- (funcall axis-function o2) (funcall axis-function o1)))))
 
-(defparameter *distances* nil)
-
 (defun get-minimal-distance-relation (pose timestamp map-parts)
   ;; assuming everything in map frame
   (let ((pose (map->robot-frame pose timestamp)))
@@ -186,7 +184,6 @@
           :key (lambda (task-desig-pair)
                  (cdr (task-interval (cdr task-desig-pair)))))))
     (loop for (desig . task) in desigs
-;;       for (mng-desig time collection) = (multiple-value-list (mongo-get-designator desig))
        for mng-desig = (mongo-get-designator desig)
        when (and mng-desig
                  (equal (cdr (assoc 'name mng-desig))
@@ -254,6 +251,12 @@
   (crs:<- (mongo-desig-pose ?desig ?resulting-pose)
     (mongo-desig-prop ?desig (pose ?pose))
     (mongo-desig-prop ?pose (pose ?pose2))
+
+    ;; make sure the pose is in map coordinates
+    (mongo-desig-prop ?pose (header ?header))
+    (mongo-desig-prop ?header (frame_id ?frame))
+    (crs:lisp-pred search "map" ?frame)
+
     (mongo-desig-prop ?pose2 (position ?position))
     (crs:equal ?position ((x . ?x) (y . ?y) (z . ?z)))
     (mongo-desig-prop ?pose2 (orientation ?orientation))
@@ -323,6 +326,52 @@
   (assert-single (last (alexandria:flatten lit))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; on-top-of predicate
+;; FIXME: checks just axis-aligned (should be ok for kitchen map though)
+(defun on-top-of (pose experiment)
+  (flet ((mp-edge (side direction mp)
+           (let ((op (ecase side
+                       (:min #'-)
+                       (:max #'+))))
+             (funcall op
+                      (funcall direction
+                               (cl-transforms:origin
+                                (cl-semantic-map-utils:pose mp)))
+
+                      (/ (funcall direction
+                                  (cl-semantic-map-utils:dimensions mp))
+                         2)))))
+    (loop for mp in (cl-semantic-map-utils:semantic-map-parts (semantic-map experiment))
+       with obj-origin = (cl-transforms:origin pose)
+       with closest = (cons nil 10000)
+       for dist = (cl-transforms:v-dist
+                   obj-origin
+                   (cl-transforms:origin (cl-semantic-map-utils:pose mp))) do
+         (when (and
+                (> (cl-transforms:z obj-origin)
+                   (mp-edge :max #'cl-transforms:z mp))
+                (< (cl-transforms:z obj-origin)
+                   (+ (mp-edge :max #'cl-transforms:z mp)
+                      ;; FIXME: hardcoded values are baaad
+                      0.15))
+                (> (cl-transforms:x obj-origin)
+                   (mp-edge :min #'cl-transforms:x mp))
+                (< (cl-transforms:x obj-origin)
+                   (mp-edge :max #'cl-transforms:x mp))
+                (> (cl-transforms:y obj-origin)
+                   (mp-edge :min #'cl-transforms:y mp))
+                (< (cl-transforms:y obj-origin)
+                   (mp-edge :max #'cl-transforms:y mp))
+                ;; we just want the relation to the closest map object
+                (< dist (cdr closest)))
+           (setf (car closest) mp
+                 (cdr closest) dist)
+           ;; (format t "~a~%"
+           ;;         (cl-semantic-map-utils:name mp))
+           )
+         finally (return (car closest)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun map->robot-frame (pose owl-time)
   (let ((map->bl (lookup-mongo-transform "/base_link" "/map" owl-time)))
@@ -350,20 +399,29 @@
       collect (list (intern (string-upcase type))
                     (intern (string-upcase name))))
    ;; relational positions
-   (loop for obj in (manipulation-objects exp-trace)
-      append
-        (manip-object-world-state timestamp obj exp-trace))
-   ;; reachability of unique-objects
+   ;; (loop for obj in (manipulation-objects exp-trace)
+   ;;    append
+   ;;      (manip-object-world-state timestamp obj exp-trace))
+   ;; reachability of unique-objects and such
    (object-properties
     (list
-     (cons 'reachable-left #'(lambda (pose name time) (> (pose-reachablility :left pose time) 0)))
-     (cons 'reachable-right #'(lambda (pose name time) (> (pose-reachablility :right pose time) 0)))
-
-     (cons 'in-view #'(lambda (pose name time)
-                  (in-camera-view pose time #"pr2:pr2_head_mount_kinect_rgb_link"))))
+     (lambda (pose name time)
+       (if (> (pose-reachablility :left pose time) 0)
+           `(reachable-left ,name)))
+     (lambda (pose name time)
+       (if (> (pose-reachablility :right pose time) 0)
+           `(reachable-right ,name)))
+     (lambda (pose name time)
+       (if (in-camera-view pose time #"pr2:pr2_head_mount_kinect_rgb_link")
+           `(in-view ,name)))
+     (lambda (pose name time)
+       (let ((mp (on-top-of pose exp-trace)))
+         (if mp
+             `(on-top-of ,name ,(intern (string-upcase (cl-semantic-map-utils:name mp)))))))
+     )
     timestamp exp-trace)))
 
-(defun object-properties (proplist timestamp exp-trace)
+(defun object-properties (flist timestamp exp-trace)
   (loop for obj in (manipulation-objects exp-trace)
       for obj-name = (slot-value obj 'name)
       for obj-symbol = (intern obj-name)
@@ -371,9 +429,10 @@
                       (mng-latest-obj-name-perception obj-name timestamp exp-trace))
      when obj-pose
      append
-       (loop for (pname . ppred) in proplist
-            when (funcall ppred obj-pose obj-symbol timestamp)
-            collect (list pname obj-symbol))))
+       (loop for func in flist
+            for res = (funcall func obj-pose obj-symbol timestamp)
+            when res
+            collect res)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -57,13 +57,20 @@
       for type = (cl-semantic-map-utils:obj-type semmap-obj)
       for dims = (cl-semantic-map-utils:dimensions semmap-obj)
       for pose = (cl-semantic-map-utils:pose semmap-obj)
-      for id from starting-id
+        with id = (1- starting-id)
       collect
-        (make-marker pose id (random-color) :cube
+        (make-marker pose (incf id) (random-color) :cube
                      :scale (list (cl-transforms:x dims)
                                   (cl-transforms:y dims)
                                   (cl-transforms:z dims))
-                     :ns "semantic-map")))
+                     :ns "semantic-map" :alpha 0.5)
+        collect
+        (make-marker pose (incf id)
+                     '(0 0 1)
+                     :text_view_facing
+                     :text name
+                     :ns "semantic-map-names")
+        ))
 
 (defun make-manip-obj-marker (timestamp starting-id experiment)
   (let ((id starting-id)

@@ -285,13 +285,44 @@
          (cut:force-ll (crs:prolog `(mongo-obj-desig->pose ,mng-desig ?p))))
       ?p)))
 
-(defun pose-reachable-p (side pose owl-time)
+(defun pose-reachablility (side pose owl-time)
   "`pose' has to be in the /map frame."
   (let ((map->tll (lookup-mongo-transform "/torso_lift_link" "/map" owl-time)))
     ;; TODO: grasp orientation/offset?
     (pr2-reachability-costmap:pose-reachability
      (pr2-reachability-costmap:get-reachability-map side)
      (cl-transforms:transform-pose map->tll pose))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
+
+(defun in-camera-view (pose owl-time camera-id)
+  (flet ((read-owl-value (id predicate &key (keep-string nil))
+           (let ((val (owl-literal->lisp
+                       (assert-single
+                        (re-pl-utils:owl-has-query :subject id :predicate predicate)))))
+             (if keep-string
+                 val
+                 (read-from-string val)))))
+    (let ((hfov (read-owl-value camera-id #"srdl2comp:hfov"))
+          (imgx (read-owl-value camera-id #"srdl2comp:imageSizeX"))
+          (imgy (read-owl-value camera-id #"srdl2comp:imageSizeY"))
+          (camera-frame (concatenate
+                         'string "/"
+                         (read-owl-value camera-id #"srdl2comp:urdfName" :keep-string t))))
+      (let ((vfov (* (/ imgy imgx ) hfov))
+            (cam-tf (lookup-mongo-transform camera-frame "/map" owl-time)))
+        (let ((origin-in-cam-frame (cl-transforms:origin
+                                    (cl-transforms:transform-pose cam-tf pose))))
+          (with-slots ((x cl-transforms:x) (y cl-transforms:y) (z cl-transforms:z))
+              origin-in-cam-frame
+            (and (< (abs (atan y x)) (/ hfov 2))
+                 (< (abs (atan z x)) (/ vfov 2)))))))))
+
+(defun owl-literal->lisp (lit)
+  (assert-single (last (alexandria:flatten lit))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun map->robot-frame (pose owl-time)
   (let ((map->bl (lookup-mongo-transform "/base_link" "/map" owl-time)))
@@ -323,25 +354,26 @@
       append
         (manip-object-world-state timestamp obj exp-trace))
    ;; reachability of unique-objects
-   (loop for obj in (manipulation-objects exp-trace)
+   (object-properties
+    (list
+     (cons 'reachable-left #'(lambda (pose name time) (> (pose-reachablility :left pose time) 0)))
+     (cons 'reachable-right #'(lambda (pose name time) (> (pose-reachablility :right pose time) 0)))
+
+     (cons 'in-view #'(lambda (pose name time)
+                  (in-camera-view pose time #"pr2:pr2_head_mount_kinect_rgb_link"))))
+    timestamp exp-trace)))
+
+(defun object-properties (proplist timestamp exp-trace)
+  (loop for obj in (manipulation-objects exp-trace)
       for obj-name = (slot-value obj 'name)
       for obj-symbol = (intern obj-name)
       for obj-pose = (mongo-obj-desig->pose
                       (mng-latest-obj-name-perception obj-name timestamp exp-trace))
-      for in-reach-left = (if obj-pose
-                              (pose-reachable-p :left obj-pose timestamp)
-                              0)
-      for in-reach-right = (if obj-pose
-                               (pose-reachable-p :right obj-pose timestamp)
-                               0)
-      when (> in-reach-left 0)
-      collect (list 'reachable-left obj-symbol)
-        when (> in-reach-right 0)
-      collect (list 'reachable-right obj-symbol)
-      do
-        (cache-pose obj-symbol timestamp obj-pose))
-   ))
-
+     when obj-pose
+     append
+       (loop for (pname . ppred) in proplist
+            when (funcall ppred obj-pose obj-symbol timestamp)
+            collect (list pname obj-symbol))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

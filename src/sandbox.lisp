@@ -19,16 +19,7 @@
   (json-prolog:prolog '("register_ros_package" "iai_maps"))
   (load-experiment exp)
   (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room")
-  (re-pl-utils:load-local-owl-file "mod_srdl" "owl" "PR2")
-  )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; (defun filter-prada-states-for (action states)
-;;   (remove-if (lambda (ps)
-;;                (eq (car (slot-value ps 'cl-prada::action)))
-;;                ))
-;;   )
+  (re-pl-utils:load-local-owl-file "mod_srdl" "owl" "PR2"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Code from Paradigms of AI Programming

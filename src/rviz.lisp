@@ -158,7 +158,6 @@
                0.5)
     (list (/ r 255) (/ g 255) (/ b 255))))
 
-
 ;; FIXME: robot pose vis seems to be off, compared to baselink -> map transform
 ;; (show-reachability :left :starting-id 420 :transform (lookup-mongo-transform  "/map" "/torso_lift_link"  "http://ias.cs.tum.edu/kb/cram_log.owl#timepoint_1396513242"))
 (defun show-reachability (side &key (starting-id 0)

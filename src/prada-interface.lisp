@@ -68,3 +68,21 @@
 ;;              ("member" ?s ',timesteps)
 ;;              ("member" ?e ',timesteps))
 ;;      (re-pl-utils:prolog->string ?t))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun cross-product (l1 l2)
+  (loop for a in l1 append
+       (loop for b in l2 collect
+            (list a b))))
+
+(defun try-different-parameters (experiences alpha-pen-lst pmin-lst)
+  (loop for (alpha-pen p-min) in (cross-product alpha-pen-lst pmin-lst)
+       for fname = (format nil "/tmp/learned_rules~a_~a.dat" alpha-pen p-min)
+     do
+       (cl-prada::run-learner experiences (prada-symbol-defs-from-learn-data experiences)
+                              :alpha-pen alpha-pen
+                              :p-min p-min
+                              :output-file fname)
+       )
+  )

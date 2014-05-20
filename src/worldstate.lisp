@@ -108,19 +108,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; TODO: robot-at, gripper-at predicates, parking positions
-(defun robot-world-state-at (owl-time semantic-map)
-  (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map owl-time :name 'pr2))
-        (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map owl-time
-                                   :name 'lgripper))
-        (rgripper (discretize-pose (robot-gripper-pose :right owl-time) semantic-map owl-time
-                                   :name 'rgripper)))
-    (append
-     '((robot pr2)
-       (gripper-left lgripper)
-       (gripper-right rgripper))
-     rpose lgripper rgripper)))
-
 (defun unique-objects (desig-id-lst &key (prop 'name))
   "takes a list of object designator owl ids, removes duplicates (i.e. where prop is the same)."
   (remove-duplicates desig-id-lst
@@ -297,8 +284,82 @@
      (cl-transforms:transform-pose map->tll pose))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
 
+;; FIXME: where to get these from? maybe from the pm source?
+(defparameter *carry-pose-left*
+  (cl-transforms:make-pose
+   (tf:make-3d-vector 0.3 0.5 1.3)
+   (tf:euler->quaternion :ax 0)))
+(defparameter *carry-pose-right*
+  (cl-transforms:make-pose
+   (tf:make-3d-vector 0.3 -0.5 1.3)
+   (tf:euler->quaternion :ax 0)))
+
+(defparameter *pose-epsilon* 0.2)
+
+(defun pose-distance (p1 p2)
+  (cl-transforms:v-dist
+   (cl-transforms:origin p1) (cl-transforms:origin p2)))
+
+(defun gripper-at-p (side p owl-time)
+  (let ((pose (cl-transforms:transform->pose
+                  (lookup-mongo-transform "/base_link"
+                                          (ecase side
+                                            (:left
+                                             "/l_wrist_roll_link")
+                                            (:right
+                                             "/r_wrist_roll_link"))
+                                          owl-time))))
+    (< (pose-distance p pose) *pose-epsilon*)))
+
+(defun arms-parked (owl-time)
+  (list (if (gripper-at-p :left *carry-pose-left* owl-time)
+            '(arm-parked left))
+        (if (gripper-at-p :right *carry-pose-right* owl-time)
+            '(arm-parked right))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; assumption: distance between left & right gripper tip is less than this value -> closed
+(defparameter *gripper-open-distance* 0.1)
+(defun gripper-state (side owl-time)
+  (let ((prefix (ecase side
+                  (:left "l")
+                  (:right "r")))
+        (symb (ecase side
+                  (:left 'left)
+                  (:right 'right))))
+    (let ((left (cl-transforms:transform->pose
+                 (lookup-mongo-transform "/base_link"
+                                         (format nil "/~a_gripper_l_finger_tip_link" prefix)
+                                         owl-time)))
+          (right (cl-transforms:transform->pose
+                  (lookup-mongo-transform "/base_link"
+                                          (format nil "/~a_gripper_r_finger_tip_link" prefix)
+                                          owl-time))))
+      (if (< (pose-distance left right) *gripper-open-distance*)
+          `(gripper-closed ,symb)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; TODO: robot-at, gripper-at predicates, parking positions
+(defun robot-world-state-at (owl-time semantic-map)
+  (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map owl-time :name 'pr2))
+        (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map owl-time
+                                   :name 'lgripper))
+        (rgripper (discretize-pose (robot-gripper-pose :right owl-time) semantic-map owl-time
+                                   :name 'rgripper)))
+    (remove nil
+            (append
+             '((robot pr2)
+               (gripper-left lgripper)
+               (gripper-right rgripper))
+             rpose lgripper rgripper
+             (arms-parked owl-time)
+             (list (gripper-state :left owl-time)
+                   (gripper-state :right owl-time))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
 (defun in-camera-view (pose owl-time camera-id)
   (flet ((read-owl-value (id predicate &key (keep-string nil))
            (let ((val (owl-literal->lisp
@@ -482,17 +543,57 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; (defun in-gripper-within-experiment (experiment)
-;;   (let ((all-desigs (mapcar
-;;                      (lambda (doc)
-;;                        ;; concatenate
-;;                        ;; 'string
-;;                        ;; #"cram_log:"
-;;                        (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
-;;                      (cl-mongo:docs
-;;                       (cl-mongo:db.find "logged_designators"
-;;                                         (cl-mongo:kv "designator.OBJ.AT.IN" "GRIPPER") :limit 0))))
-;;         (experiment-ts (timesteps-between (start-time experiment) (end-time experiment))))
-;;     all-desigs))
+;; FIXME: am not able to find the in-gripper designator via knowrob
+(defun in-gripper-within-experiment (experiment)
+  (let ((all-desigs (mapcar
+                     (lambda (doc)
+                       ;; concatenate
+                       ;; 'string
+                       ;; #"cram_log:"
+                       (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
+                     (cl-mongo:docs
+                      (cl-mongo:db.find "logged_designators"
+                                        (cl-mongo:kv "designator.OBJ.AT.IN" "GRIPPER") :limit 0))))
+        (experiment-ts (timesteps-between (start-time experiment) (end-time experiment))))
+    all-desigs))
 
 ;; example for new desig format: (mongo-get-designator "designator_iKFiq84q0W3wCn")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun all-poses (frame timestamps &key (base-frame "/map"))
+  (loop for ts in timestamps
+       collect
+       (cl-transforms:transform->pose (lookup-mongo-transform base-frame frame ts))))
+
+(defun poses->file (poses filename)
+  (with-open-file (out filename :direction :output :if-exists :supersede)
+    (format out "# x y z~%")
+    (dolist (p poses)
+      (let ((origin (cl-transforms:origin p)))
+          (format out "~a ~a ~a~%" (cl-transforms:x origin)
+                  (cl-transforms:y origin)
+                  (cl-transforms:z origin))))))
+
+
+
+;; (defun mean (poses)
+;;   (/ (reduce #'+ (mapcar #'cl-transforms:v-norm (mapcar #'cl-transforms:origin poses)))
+;;      (length poses)))
+
+;; (defun variance (poses)
+;;   (let ((mean (mean poses)))
+;;     (/ (reduce #'+
+;;                (mapcar (lambda (p)
+;;                          (expt (- (cl-transforms:v-norm (cl-transforms:origin p)) mean) 2))
+;;                        poses))
+;;        (length poses))))
+
+;; (defun std-dev (poses)
+;;   (sqrt (variance poses)))
+
+;; (defun find-best-base-frame (frame timesteps possible-frames)
+;;   (loop for parent-frame in possible-frames
+;;        for variance = (variance (all-poses frame timesteps :base-frame parent-frame)) do
+;;        (format t "frame: ~s; variance: ~a~%" parent-frame variance)
+;;        )
+;;   )

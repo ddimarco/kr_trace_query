@@ -2,7 +2,7 @@
 
 (defun owl->graphviz (owlid &key stream (depth 1)
                               (ignore-prop-list '(#"knowrob:taskContext" #"knowrob:goalContext"
-                                                  #"rdf:type")))
+                                                  #"rdf:type" #"knowrob:startTime" #"knowrob:endTime")))
   (labels ((write-owl (owlid d str &optional visited-list)
              (when (= d depth)
                (format str "digraph G {~%"))

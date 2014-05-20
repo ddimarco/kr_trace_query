@@ -58,8 +58,7 @@
     (crs:lisp-fun gensym "LOCATION" ?object-name)
     (crs:format "creating new location object~%")
     (mongo-desig-has-quantitative-at ?object-name ?timestamp ?desig ?object-loc-assertions)
-    (crs:lisp-fun append ((location ?object-name)) ?object-loc-assertions ?object-assertions)
-    )
+    (crs:lisp-fun append ((location ?object-name)) ?object-loc-assertions ?object-assertions))
 
   (crs:<- (object-name ?desig ?name ?timestamp ?additional-assertions)
     ;; use the referenced object name in the designator
@@ -100,8 +99,7 @@
               (->symbol ?on-obj-name-str ?obj-name))
              (crs:and
               (crs:equal ?direction on)
-              (crs:equal ?object-parameter ?obj-name)
-              )))
+              (crs:equal ?object-parameter ?obj-name))))
     ;; no additional assertions
     (crs:equal ?additional nil))
 
@@ -142,6 +140,14 @@
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+  ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
+  ;;   (crs:or (crs:equal ?arm-used left) (crs:equal ?arm-used right)
+  ;;           (crs:equal ?arm-used none)))
+
+  ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
+  ;;   (crs:equal ?arm-used both)
+  ;;   (crs:format "both arms used in ~a...~%" ?popm-id))
+
    ;; follow trajectory
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
@@ -156,6 +162,7 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (crs:equal ?additional nil)
     (arm-used ?popm-id ?arm)
+    ;;(split-manipulation-action ?arm-used ?popm-id ?additional)
     (crs:equal ?action (put-down ?obj-name ?arm)))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
@@ -164,6 +171,7 @@
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
+    ;; (split-manipulation-action ?arm-used ?popm-id ?additional)
     (crs:equal ?additional nil)
     (crs:equal ?action (lift ?obj-name ?arm)))
 
@@ -192,7 +200,6 @@
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
     (crs:equal ?action (carry-object ?obj-name ?arm)))
-
 
   ;; FIXME: actions without object names:
   ;; (defparameter *unusable-actions*

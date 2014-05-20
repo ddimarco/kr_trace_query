@@ -21,6 +21,12 @@
         res
         full)))
 
+(defun combine-id-with-ns-shortcut (namespace-short identifier)
+  (let ((namespace-resolved (get-owl-namespace namespace-short)))
+    (when (null namespace-resolved)
+      (error "could not resolve owl namespace ~s (id: ~s)!" namespace-short identifier))
+    (concatenate 'string namespace-resolved "#" identifier)))
+
 (defun owl-symbol-reader (stream sub-char numarg)
   "Defines a read macro for shortcut representation of OWL identifiers. E.g.: #\"knowrob:Thing\""
   (declare (ignore sub-char numarg))
@@ -32,12 +38,8 @@
           'string)))
     (unless (position #\: string)
       (error "no ':' in owl identifier ~s, so no namespace can be found." string))
-    (let ((namespace-short (subseq string 0 (position #\: string)))
-          (identifier (subseq string (1+ (position #\: string)))))
-      (let ((namespace-resolved (get-owl-namespace namespace-short)))
-        (when (null namespace-resolved)
-          (error "could not resolve owl namespace ~s in ~s!" namespace-short string))
-        (concatenate 'string namespace-resolved "#" identifier)))))
+    (combine-id-with-ns-shortcut (subseq string 0 (position #\: string))
+                                 (subseq string (1+ (position #\: string))))))
 
 (eval-when (:load-toplevel)
   (register-owl-namespace "knowrob" "http://ias.cs.tum.edu/kb/knowrob.owl")

@@ -202,6 +202,11 @@
 (defun cache-pose (obj time pose)
   (push (list obj time pose) *poses*))
 
+(defun make-pose-helper (x y z qx qy qz qw)
+  (cl-transforms:make-pose
+   (cl-transforms:make-3d-vector x y z)
+   (cl-transforms:make-quaternion qx qy qz qw)))
+
 (crs:def-fact-group mng-desig->qualitative-pos (mongo-desig-pose-rel mongo-desig-pose)
   (crs:<- (mongo-desig-pose-rel ?desig ?owl-time ?res)
     (mongo-desig-prop ?desig (at ?spec))
@@ -249,9 +254,11 @@
     (mongo-desig-prop ?pose2 (orientation ?orientation))
     (crs:equal ?orientation ((x . ?ox) (y . ?oy) (z . ?oz) (w . ?ow)))
 
-    (crs:lisp-fun cl-transforms:make-3d-vector ?x ?y ?z ?origin)
-    (crs:lisp-fun cl-transforms:make-quaternion ?ox ?oy ?oz ?ow ?quaternion)
-    (crs:lisp-fun cl-transforms:make-pose ?origin ?quaternion ?resulting-pose))
+    ;; (crs:lisp-fun cl-transforms:make-3d-vector ?x ?y ?z ?origin)
+    ;; (crs:lisp-fun cl-transforms:make-quaternion ?ox ?oy ?oz ?ow ?quaternion)
+    ;; (crs:lisp-fun cl-transforms:make-pose ?origin ?quaternion ?resulting-pose)
+    (crs:lisp-fun make-pose-helper ?x ?y ?z ?ox ?oy ?oz ?ow ?resulting-pose)
+    )
 
   (crs:<- (mongo-desig-has-quantitative-at ?obj-name ?owl-time ?desig ?res)
     (mongo-desig-pose ?desig ?obj-pose)
@@ -301,22 +308,40 @@
   (cl-transforms:v-dist
    (cl-transforms:origin p1) (cl-transforms:origin p2)))
 
+(defun gripper-pose-bl (side owl-time)
+  (cl-transforms:transform->pose
+   (lookup-mongo-transform "/base_link"
+                           (ecase side
+                             (:left
+                              "/l_wrist_roll_link")
+                             (:right
+                              "/r_wrist_roll_link"))
+                                          owl-time)))
+
 (defun gripper-at-p (side p owl-time)
-  (let ((pose (cl-transforms:transform->pose
-                  (lookup-mongo-transform "/base_link"
-                                          (ecase side
-                                            (:left
-                                             "/l_wrist_roll_link")
-                                            (:right
-                                             "/r_wrist_roll_link"))
-                                          owl-time))))
-    (< (pose-distance p pose) *pose-epsilon*)))
+  (< (pose-distance p (gripper-pose-bl side owl-time))
+     *pose-epsilon*))
 
 (defun arms-parked (owl-time)
   (list (if (gripper-at-p :left *carry-pose-left* owl-time)
             '(arm-parked left))
         (if (gripper-at-p :right *carry-pose-right* owl-time)
             '(arm-parked right))))
+
+(defun gripper-did-move (side start end)
+  (> (pose-distance (gripper-pose-bl side start) (gripper-pose-bl side end))
+     *pose-epsilon*))
+
+(defun grippers-moved (start end)
+  (list (if (gripper-did-move :left start end)
+            '(gripper-moved left))
+        (if (gripper-did-move :right start end)
+            '(gripper-moved right))))
+
+(defun base-moved (start end)
+  (list (if (> (pose-distance (robot-pose start) (robot-pose end))
+            *pose-epsilon*)
+            '(base-moved pr2))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -342,7 +367,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODO: robot-at, gripper-at predicates, parking positions
-(defun robot-world-state-at (owl-time semantic-map)
+(defun robot-world-state-at (owl-time semantic-map &key (before nil))
   (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map owl-time :name 'pr2))
         (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map owl-time
                                    :name 'lgripper))
@@ -356,7 +381,12 @@
              rpose lgripper rgripper
              (arms-parked owl-time)
              (list (gripper-state :left owl-time)
-                   (gripper-state :right owl-time))))))
+                   (gripper-state :right owl-time))
+             (if before
+                 (append
+                  (grippers-moved before owl-time)
+                  (base-moved before owl-time)
+                  ))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
@@ -444,7 +474,8 @@
                                    exp-trace)
    timestamp))
 
-(defun all-manip-objects-world-state (timestamp exp-trace)
+(defun all-manip-objects-world-state (timestamp exp-trace ;; &key (before nil)
+                                                            )
   (append
    (loop for x in '(center on left right both none)
         collect (list (intern (format nil "~a-CONSTANT" x)) x))
@@ -536,7 +567,7 @@
      (append
       ;; TODO: timestamp +1?
       (all-manip-objects-world-state end exp-trace)
-      (robot-world-state-at end (semantic-map exp-trace))
+      (robot-world-state-at end (semantic-map exp-trace) :before start)
       (let ((af (action-failure popm-id)))
         (if af
             (list (list af))))))))

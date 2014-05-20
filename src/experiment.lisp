@@ -10,7 +10,8 @@
         (make-instance 'experiment-trace
                        :root-owlid root
                        :semantic-map (cl-semantic-map-utils:get-semantic-map)))
-  (setf *prada-experiences* (full-prada-trace *experiment*)))
+  (setf *prada-experiences*
+        (full-prada-trace *experiment*)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

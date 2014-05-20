@@ -2,11 +2,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODO: should be possible to use all
-(defun usable-actions ()
+(defun usable-actions (&key (action-type nil))
   "only keep actions which can be converted to a relational form"
   (remove-if (lambda (actionid)
-               (not (identity
-                     (owl-desig->relational actionid (car (task-interval actionid))))))
+               (let ((relational
+                      (owl-desig->relational actionid (car (task-interval actionid)))))
+                 (or (null relational)
+                     (and (identity action-type) (not (eq (car relational) action-type))))))
              (get-all-actions)))
 
 ;; NOTE: prada needs to be set to use state - action - state data
@@ -18,19 +20,30 @@
                                   additional-assertions)
                    :action action
                    :world-after (append (world-state-after-action popm-id exp-trace)
-                                        additional-assertions))))
+                                        additional-assertions)
+                   :comment (format nil "id: ~a, duration: ~a" (shorten-uri popm-id)
+                                    (destructuring-bind (start . end) (task-interval popm-id)
+                                      (- (timepoint-id->time end) (timepoint-id->time start)))))))
 
 (defun full-prada-trace (experiment)
-  (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment))))
-    (loop for action in (usable-actions)
+  (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment)))
+        (all-actions (usable-actions)))
+    (loop for action in all-actions
+         for i from 0
+       for progress = (float (* 100.0 (/ (1+ i) (length all-actions))))
        for start-time = (assert-single-recursive
                          (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:startTime"))
        for end-time = (assert-single-recursive
                          (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:endTime"))
-         when (and (member start-time timestamps :test #'equal)
-                   (member end-time timestamps :test #'equal))
+       when (and (member start-time timestamps :test #'equal)
+                 (member end-time timestamps :test #'equal))
        collect
-         (make-learn-instance action start-time experiment))))
+         (progn
+           (when (string= start-time end-time)
+             (roslisp:ros-warn () "WARNING: action ~a has a duration of length 0!" action))
+          (make-learn-instance action start-time experiment))
+         do
+         (format t "~a completed~%" progress))))
 
 (defun prada-symbol-defs-from-learn-data (data)
   (let ((symbol-hash (make-hash-table)))

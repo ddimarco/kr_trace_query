@@ -56,7 +56,7 @@
 
   (crs:<- (create-pose-object ?desig ?object-name ?timestamp ?object-assertions)
     (crs:lisp-fun gensym "LOCATION" ?object-name)
-    (crs:format "creating new location object~%")
+    ;; (crs:format "creating new location object~%")
     (mongo-desig-has-quantitative-at ?object-name ?timestamp ?desig ?object-loc-assertions)
     (crs:lisp-fun append ((location ?object-name)) ?object-loc-assertions ?object-assertions))
 
@@ -143,15 +143,15 @@
   ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
   ;;   (crs:or (crs:equal ?arm-used left) (crs:equal ?arm-used right)
   ;;           (crs:equal ?arm-used none)))
-
   ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
   ;;   (crs:equal ?arm-used both)
   ;;   (crs:format "both arms used in ~a...~%" ?popm-id))
 
-   ;; follow trajectory
+   ;; follow trajectory: basically "move-head"
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "FOLLOW"))
+    ;; (crs:format "~a~%" ?mongo-desig)
     (object-name ?mongo-desig ?name ?timestamp ?additional)
     (crs:equal (follow-trajectory ?name) ?action))
 
@@ -184,13 +184,14 @@
     (crs:equal ?additional nil)
     (crs:equal ?action (grasp ?obj-name ?arm)))
 
-  ;; FIXME: is always :none
+  ;; FIXME: arm is always :none
+  ;; always null duration
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "PARK"))
-    (arm-used ?popm-id ?arm)
+    ;; (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
-    (crs:equal ?action (park-arm ?arm)))
+    (crs:equal ?action (park-arms pr2)))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))

@@ -167,10 +167,8 @@
              (typecase val
                  (cl-mongo:document
                   (lispify-mongo-doc val))
-
                  (list
                   (mapcar #'lispify-mongo-doc val))
-
                  (t val)))))
 
 (defun mongo-get-designator (id &key (collection "logged_designators"))
@@ -180,7 +178,7 @@
     (let ((result (cl-mongo:docs
                    (cl-mongo:iter
                     (cl-mongo:db.find collection (cl-mongo:kv "designator._id" id) :limit 0)))))
-      (assert (= (length result) 1) (result) "designator list is > 1: ~a" result)
+      (assert (= (length result) 1) (result) "designator list is /= 1: ~a" result)
       (if result
           (values (lispify-mongo-doc (car (cl-mongo:get-element "designator" result)))
                   (cl-mongo:bson-time-to-ut (cl-mongo:get-element "__recorded" (car result)))

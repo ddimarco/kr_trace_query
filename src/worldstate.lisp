@@ -474,8 +474,7 @@
                                    exp-trace)
    timestamp))
 
-(defun all-manip-objects-world-state (timestamp exp-trace ;; &key (before nil)
-                                                            )
+(defun all-manip-objects-world-state (timestamp exp-trace)
   (append
    (loop for x in '(center on left right both none)
         collect (list (intern (format nil "~a-CONSTANT" x)) x))
@@ -491,9 +490,9 @@
       collect (list (intern (string-upcase type))
                     (intern (string-upcase name))))
    ;; relational positions
-   ;; (loop for obj in (manipulation-objects exp-trace)
-   ;;    append
-   ;;      (manip-object-world-state timestamp obj exp-trace))
+   (loop for obj in (manipulation-objects exp-trace)
+      append
+        (manip-object-world-state timestamp obj exp-trace))
    ;; reachability of unique-objects and such
    (object-properties
     (list
@@ -509,8 +508,7 @@
      (lambda (pose name time)
        (let ((mp (on-top-of pose exp-trace)))
          (if mp
-             `(on-top-of ,name ,(intern (string-upcase (cl-semantic-map-utils:name mp)))))))
-     )
+             `(on-top-of ,name ,(intern (string-upcase (cl-semantic-map-utils:name mp))))))))
     timestamp exp-trace)))
 
 (defun object-properties (flist timestamp exp-trace)
@@ -525,7 +523,6 @@
             for res = (funcall func obj-pose obj-symbol timestamp)
             when res
             collect res)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; find error for action
@@ -575,20 +572,35 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; FIXME: am not able to find the in-gripper designator via knowrob
-(defun in-gripper-within-experiment (experiment)
-  (let ((all-desigs (mapcar
-                     (lambda (doc)
-                       ;; concatenate
-                       ;; 'string
-                       ;; #"cram_log:"
-                       (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
-                     (cl-mongo:docs
-                      (cl-mongo:db.find "logged_designators"
-                                        (cl-mongo:kv "designator.OBJ.AT.IN" "GRIPPER") :limit 0))))
-        (experiment-ts (timesteps-between (start-time experiment) (end-time experiment))))
-    all-desigs))
+;; (defun in-gripper-within-experiment (experiment)
+;;    (let ((mongo-docs (cl-mongo:docs
+;;                      (cl-mongo:db.find "logged_designators"
+;;                                        (cl-mongo:kv "designator.OBJ.AT.IN" "GRIPPER") :limit 0))))
+;;     (loop for doc in mongo-docs
+;;          for id = (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc))
+;;          for time = (cl-mongo:get-element "__recorded" doc)
+;;          collect (cons id time))))
 
 ;; example for new desig format: (mongo-get-designator "designator_iKFiq84q0W3wCn")
+;; (mongo-get-designator "designator_iKFiq84q0W3wCn")
+;; "http://ias.cs.tum.edu/kb/cram_log.owl#PerformOnProcessModule_7Tfbe0aW"
+
+;; mod_execution_trace:perform_time_check(t1 t2 res):
+;; res = 1: t1 < t2
+;; res = 2: t1 > t2
+;; res = 0: t1 == t2
+;; TODO:
+;; extract ws also from the next action designator
+(defun object-state-from-action-desigs (after before)
+  (mapcar (lambda (bdgs)
+            (cut:with-vars-bound (?p) bdgs
+              (mongo-get-designator
+               (get-action-designator-for-perform-pm (re-pl-utils:prolog->string ?p)))))
+          (cut:force-ll
+           (json-prolog:prolog `(and ("owl_individual_of" ?p ,#"knowrob:PerformOnProcessModule")
+                                     ("task_start" ?p ?ps)
+                                     ("perform_time_check" ,after ?ps 1)
+                                     ("perform_time_check" ,before ?ps 2))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defun all-poses (frame timestamps &key (base-frame "/map"))
@@ -604,8 +616,6 @@
           (format out "~a ~a ~a~%" (cl-transforms:x origin)
                   (cl-transforms:y origin)
                   (cl-transforms:z origin))))))
-
-
 
 ;; (defun mean (poses)
 ;;   (/ (reduce #'+ (mapcar #'cl-transforms:v-norm (mapcar #'cl-transforms:origin poses)))
@@ -628,3 +638,7 @@
 ;;        (format t "frame: ~s; variance: ~a~%" parent-frame variance)
 ;;        )
 ;;   )
+(defun poses-for-action-types (action-symbol)
+  (let ((actions (usable-actions :action-type action-symbol)))
+    actions
+    ))

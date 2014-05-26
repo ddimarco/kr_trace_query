@@ -16,11 +16,13 @@
   (multiple-value-bind (action additional-assertions)
       (owl-desig->relational popm-id timestamp)
     (make-instance 'cl-prada::prada-learn-state
-                   :world (append (world-state-before-action popm-id exp-trace)
-                                  additional-assertions)
+                   :world (reverse
+                           (append (world-state-before-action popm-id exp-trace)
+                                   additional-assertions))
                    :action action
-                   :world-after (append (world-state-after-action popm-id exp-trace)
-                                        additional-assertions)
+                   :world-after (reverse
+                                 (append (world-state-after-action popm-id exp-trace)
+                                         additional-assertions))
                    :comment (format nil "id: ~a, duration: ~a" (shorten-uri popm-id)
                                     (destructuring-bind (start . end) (task-interval popm-id)
                                       (- (timepoint-id->time end) (timepoint-id->time start)))))))

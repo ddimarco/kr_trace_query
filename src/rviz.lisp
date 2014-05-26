@@ -69,21 +69,18 @@
                      '(0 0 1)
                      :text_view_facing
                      :text name
-                     :ns "semantic-map-names")
-        ))
+                     :ns "semantic-map-names")))
 
 (defun make-manip-obj-marker (timestamp starting-id experiment)
   (let ((id starting-id)
         (result))
     (loop for obj in (manipulation-objects experiment)
-       ;; (unique-manip-objects-from-interval
-                     ;;  (timesteps-in-task task))
        for obj-name = (slot-value obj 'name)
        for obj-pose = (mongo-obj-desig->pose
                        (mng-latest-obj-name-perception obj-name timestamp experiment))
        when obj-pose
          do
-         (push (make-marker obj-pose id '(0 1 0) :cube :scale '(0.2 0.2 0.2) :ns "manip-obj")
+         (push (make-marker obj-pose id '(0 1 0) :cube :scale '(0.2 0.2 0.2) :ns "manip-obj" :alpha 0.5)
                result)
          (incf id)
          (push (make-marker obj-pose id '(1 0 0) :text_view_facing :text obj-name :ns "manip-obj")

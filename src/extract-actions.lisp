@@ -163,7 +163,8 @@
     (crs:equal ?additional nil)
     (arm-used ?popm-id ?arm)
     ;;(split-manipulation-action ?arm-used ?popm-id ?additional)
-    (crs:equal ?action (put-down ?obj-name ?arm)))
+    (crs:equal ?action (put-down ?obj-name ;; ?arm
+                                 )))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
@@ -173,7 +174,8 @@
     (arm-used ?popm-id ?arm)
     ;; (split-manipulation-action ?arm-used ?popm-id ?additional)
     (crs:equal ?additional nil)
-    (crs:equal ?action (lift ?obj-name ?arm)))
+    (crs:equal ?action (lift ?obj-name ;; ?arm
+                             )))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
@@ -182,7 +184,8 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
-    (crs:equal ?action (grasp ?obj-name ?arm)))
+    (crs:equal ?action (grasp ?obj-name ;; ?arm
+                              )))
 
   ;; FIXME: arm is always :none
   ;; always null duration
@@ -200,7 +203,8 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
-    (crs:equal ?action (carry-object ?obj-name ?arm)))
+    (crs:equal ?action (carry-object ?obj-name ;; ?arm
+                                     )))
 
   ;; FIXME: actions without object names:
   ;; (defparameter *unusable-actions*

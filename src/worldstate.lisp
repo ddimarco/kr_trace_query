@@ -45,16 +45,16 @@
            (loop for mp in map-parts
               for mp-pose = (map->robot-frame (cl-semantic-map-utils:pose mp) timestamp)
               for left = (axis-relation #'cl-transforms:y pose mp-pose)
-              for above = (axis-relation #'cl-transforms:z pose mp-pose)
+              for below = (axis-relation #'cl-transforms:z pose mp-pose)
               for behind = (axis-relation #'cl-transforms:x pose mp-pose)
               collect
                 (list
                  (if (> left 0)
                      (cons 'left-of left)
                      (cons 'right-of (- left)))
-                 (if (> above 0)
-                     (cons 'above-of above)
-                     (cons 'below-of (- above)))
+                 (if (> below 0)
+                     (cons 'below-of below)
+                     (cons 'above-of (- below)))
                  (if (> behind 0)
                      (cons 'behind-of behind)
                      (cons 'in-front-of (- behind)))
@@ -82,16 +82,16 @@
                    (caddr min-fb) mp))
          finally (return (list min-lr min-tb min-fb))))))
 
-;; TODO: would probably be better to use a viewpoint from the robot instead of from the map origin
 (defun discretize-pose (pose semantic-map time &key name)
-  (flet ((make-relation (dir obj)
-           (list dir name (->relational-id obj))))
-    (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
-        (get-minimal-distance-relation pose time (cl-semantic-map-utils:semantic-map-parts semantic-map))
-      (list
-       (make-relation lr-dir lr-obj)
-       (make-relation tb-dir tb-obj)
-       (make-relation fb-dir fb-obj)))))
+  ;; (flet ((make-relation (dir obj)
+  ;;          (list dir name (->relational-id obj))))
+  ;;   (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
+  ;;       (get-minimal-distance-relation pose time (cl-semantic-map-utils:semantic-map-parts semantic-map))
+  ;;     (list
+  ;;      (make-relation lr-dir lr-obj)
+  ;;      (make-relation tb-dir tb-obj)
+  ;;      (make-relation fb-dir fb-obj))))
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

@@ -12,7 +12,8 @@
                cl-semantic-map-utils
                cl-prada
                pr2-reachability-costmap
-               visualization_msgs-msg)
+               visualization_msgs-msg
+               cl-store)
   :components
   ((:module "src"
             :components

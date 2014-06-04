@@ -23,6 +23,7 @@
   <run_depend>sbcl</run_depend>
   <run_depend>re_pl_utils</run_depend>
   <run_depend>cl_mongo</run_depend>
+  <run_depend>cl_store</run_depend>
   <run_depend>alexandria</run_depend>
   <run_depend>cl_local_time</run_depend>
   <run_depend>cl_semantic_map_utils</run_depend>

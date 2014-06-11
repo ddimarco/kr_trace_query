@@ -133,19 +133,16 @@
      v2)
     ((< (* 3 h) 2)
      (+ v1 (* (- v2 v1) (- (/ 2 3) h) 6)))
-    (t
-     v1)))
+    (t v1)))
 
 (defun hsl2rgb (h s l)
   (if (< s 0.01)
       (list (* 255 l) (* 255 l) (* 255 l))
-
       (let* ((var2 (if (< l 0.5)
                     (* l (+ 1 s))
                     (- (+ s l) (* s l))))
               (var1
                (- (* 2 l) var2)))
-
         (list
          (* 255 (hue2rgb var1 var2 (+ h (/ 1 3))))
          (* 255 (hue2rgb var1 var2 h))

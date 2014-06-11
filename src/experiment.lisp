@@ -1,25 +1,5 @@
 (in-package :kr-trace-query)
 
-(defun extract-experiment (&optional (root #"cram_log:CRAMAction_EGYg8xlT"))
-  (setf *experiment*
-        (make-instance 'experiment-trace
-                       :root-owlid root
-                       :semantic-map (cl-semantic-map-utils:get-semantic-map)))
-  (setf *prada-experiences*
-        (full-prada-trace *experiment*)))
-
-(defun extract-everything ()
-  (let ((all-ts (sort-timesteps (all-time-steps))))
-    (setf *experiment*
-          (make-instance 'experiment-trace
-                         :start-time (car all-ts)
-                         :end-time (car (last all-ts))
-                         :semantic-map (cl-semantic-map-utils:get-semantic-map))))
-  (setf *prada-experiences*
-        (full-prada-trace *experiment*)))
-
- ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (defclass experiment-trace ()
   ((root-owlid :initarg :root-owlid
                :initform nil
@@ -49,7 +29,25 @@
      (unique-manip-objects-from-interval
       (timesteps-between (start-time trace) (end-time trace)))))
 
-;; (defparameter *experiment* (make-instance 'experiment-trace :root-owlid "http://ias.cs.tum.edu/kb/cram_log.owl#CRAMAction_xPY9fAsI" :semantic-map (cl-semantic-map-utils:get-semantic-map)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun extract-experiment (&optional (root #"cram_log:CRAMAction_EGYg8xlT"))
+  (setf *experiment*
+        (make-instance 'experiment-trace
+                       :root-owlid root
+                       :semantic-map (cl-semantic-map-utils:get-semantic-map)))
+  (setf *prada-experiences*
+        (full-prada-trace *experiment*)))
+
+(defun extract-everything ()
+  (let ((all-ts (sort-timesteps (all-time-steps))))
+    (setf *experiment*
+          (make-instance 'experiment-trace
+                         :start-time (car all-ts)
+                         :end-time (car (last all-ts))
+                         :semantic-map (cl-semantic-map-utils:get-semantic-map))))
+  (setf *prada-experiences*
+        (full-prada-trace *experiment*)))
 
 (defun experiment-timesteps (trace)
   (timesteps-between (start-time trace) (end-time trace)))

@@ -1,6 +1,5 @@
 (in-package :ktq)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODO: increase range of actions that can be used
 (defun usable-actions (&key (action-type nil))
   "only keep actions which can be converted to a relational form"
@@ -73,29 +72,3 @@
          for (type param-count) = value
          collect
            (cl-prada::make-symbol-def `(,type ,key ,param-count))))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; (defun tasks-of-type-within-interval (owl-type timesteps)
-;;   (cut:force-ll
-;;    (re-pl-utils:pl-query (?t)
-;;        `(and ("owl_individual_of" ?t ,owl-type)
-;;              ("task_start" ?t ?s) ("task_end" ?t ?e)
-;;              ("member" ?s ',timesteps)
-;;              ("member" ?e ',timesteps))
-;;      (re-pl-utils:prolog->string ?t))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; (defun cross-product (l1 l2)
-;;   (loop for a in l1 append
-;;        (loop for b in l2 collect
-;;             (list a b))))
-
-;; (defun try-different-parameters (experiences alpha-pen-lst pmin-lst)
-;;   (loop for (alpha-pen p-min) in (cross-product alpha-pen-lst pmin-lst)
-;;        for fname = (format nil "/tmp/learned_rules~a_~a.dat" alpha-pen p-min)
-;;      do
-;;        (cl-prada::run-learner experiences (prada-symbol-defs-from-learn-data experiences)
-;;                               :alpha-pen alpha-pen
-;;                               :p-min p-min
-;;                               :output-file fname)))

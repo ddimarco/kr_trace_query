@@ -22,6 +22,7 @@
                         (mesh_resource) mesh-resource
                         (a color) alpha))
 
+;; FIXME: spend some time to make the gripper visualization complete
 (defun make-robot-markers (timestamp id)
   (let ((frames->resources
          '(("/base_link" . "base_v0/base.dae")
@@ -37,12 +38,15 @@
            ;; ("/l_gripper_r_finger_link" . "gripper_v0/l_finger.dae")
            ("/r_gripper_l_finger_link" . "gripper_v0/l_finger.dae")
            ;; ("/r_gripper_r_finger_link" . "gripper_v0/l_finger.dae")
-          )))
+          ))
+        ;; (rot (cl-transforms:make-transform (cl-transforms:make-identity-vector)
+        ;;                                    (cl-transforms:axis-angle->quaternion #(1 0 0) pi)))
+        )
     (loop for (frame . resource) in frames->resources
          for i from id
+         for trans = (lookup-mongo-transform "/map" frame timestamp)
          collect
-         (make-marker (cl-transforms:transform->pose
-                       (lookup-mongo-transform "/map" frame timestamp))
+         (make-marker (cl-transforms:transform->pose trans)
                       i '(1 1 1) :mesh_resource :ns "robot" :scale '(1 1 1)
                       :mesh-resource (format nil "~a~a" "package://pr2_description/meshes/"
                                              resource)))))
@@ -190,36 +194,30 @@
     (roslisp:publish *vis-publisher* (make-marker-array markers))))
 
 (defun show-coordinate-frames (timestamp &key (starting-id 0))
-  (let ((frames
-         '("/map" "/base_link" "/torso_lift_link" "/odom_combined"))
+  (let ((frames '("/map" "/base_link" "/torso_lift_link" "/odom_combined"))
         (id starting-id))
     (let (mlist)
       (loop for f in frames
-           for tr = (lookup-mongo-transform "/map" f timestamp)
+         for tr = (lookup-mongo-transform "/map" f timestamp)
          do
            (push (make-marker (cl-transforms:transform-pose tr (cl-transforms:make-identity-pose))
-                         id
-                         '(0 1 0)
-                         :arrow
-                         :scale '(0.5 0.05 0.05)
-                         :ns "frames")
+                              id
+                              '(0 1 0)
+                              :arrow
+                              :scale '(0.5 0.05 0.05)
+                              :ns "frames")
                  mlist)
            (incf id)
            (push (make-marker (cl-transforms:transform-pose tr (cl-transforms:make-identity-pose))
-                         id
-                         '(1 1 1)
-                         :text_view_facing
-                         :text f
-                         :ns "frames")
+                              id
+                              '(1 1 1)
+                              :text_view_facing
+                              :text f
+                              :ns "frames")
                  mlist)
            (incf id))
-
       (roslisp:publish *vis-publisher* (make-marker-array mlist)))))
-
 
 (defun playback-experiment (experiment)
   (dolist (ts (timesteps-between (start-time experiment) (end-time experiment)))
-    (visualize-timestamp ts experiment)
-    ;; (asdf:run-shell-command (format nil "scrot /tmp/experiment_~a.png" (timepoint-id->time ts))
-    ;; )
-    ))
+    (visualize-timestamp ts experiment)))

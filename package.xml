@@ -30,5 +30,6 @@
   <run_depend>cl_prada</run_depend>
   <run_depend>pr2_reachability_costmap</run_depend>
   <run_depend>visualization_msgs</run_depend>
+  <run_depend>cl_xml_namespace_read_macro</run_depend>
 </package>
 

@@ -1,7 +1,7 @@
 (in-package :ktq)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; TODO: should be possible to use all
+;; TODO: increase range of actions that can be used
 (defun usable-actions (&key (action-type nil))
   "only keep actions which can be converted to a relational form"
   (remove-if (lambda (actionid)
@@ -45,7 +45,7 @@
              (roslisp:ros-warn () "WARNING: action ~a has a duration of length 0!" action))
           (make-learn-instance action start-time experiment))
          do
-         (format t "~a completed~%" progress))))
+         (format t "~$% completed~%" progress))))
 
 (defun prada-symbol-defs-from-learn-data (data)
   (let ((symbol-hash (make-hash-table)))
@@ -86,18 +86,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun cross-product (l1 l2)
-  (loop for a in l1 append
-       (loop for b in l2 collect
-            (list a b))))
+;; (defun cross-product (l1 l2)
+;;   (loop for a in l1 append
+;;        (loop for b in l2 collect
+;;             (list a b))))
 
-(defun try-different-parameters (experiences alpha-pen-lst pmin-lst)
-  (loop for (alpha-pen p-min) in (cross-product alpha-pen-lst pmin-lst)
-       for fname = (format nil "/tmp/learned_rules~a_~a.dat" alpha-pen p-min)
-     do
-       (cl-prada::run-learner experiences (prada-symbol-defs-from-learn-data experiences)
-                              :alpha-pen alpha-pen
-                              :p-min p-min
-                              :output-file fname)
-       )
-  )
+;; (defun try-different-parameters (experiences alpha-pen-lst pmin-lst)
+;;   (loop for (alpha-pen p-min) in (cross-product alpha-pen-lst pmin-lst)
+;;        for fname = (format nil "/tmp/learned_rules~a_~a.dat" alpha-pen p-min)
+;;      do
+;;        (cl-prada::run-learner experiences (prada-symbol-defs-from-learn-data experiences)
+;;                               :alpha-pen alpha-pen
+;;                               :p-min p-min
+;;                               :output-file fname)))

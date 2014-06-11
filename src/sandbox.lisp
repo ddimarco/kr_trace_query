@@ -1,7 +1,12 @@
 (in-package :kr-trace-query)
 
-;; cl-semantic-map-util:get-semantic-map to get map
+(defun extraction-main (input output)
+  (extract-from-log input)
+  (cl-prada::write-learn-file output *prada-experiences*)
+  (sb-ext:quit))
+
 (crs:def-fact-group sem-map-stuff (cl-semantic-map-utils:semantic-map-name)
+  ;; defines the IAI kitchen map as the semantic map to use
   (crs:<- (cl-semantic-map-utils:semantic-map-name
            "http://ias.cs.tum.edu/kb/ias_semantic_map.owl#SemanticEnvironmentMap_PM580j")))
 
@@ -21,68 +26,24 @@
   (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room")
   (re-pl-utils:load-local-owl-file "mod_srdl" "owl" "PR2"))
 
+(defparameter *experiment* nil)
+(defparameter *prada-experiences* nil)
+
+(defun store-experiences (file)
+  (cl-store:store *prada-experiences* file))
+
+(defun extract-from-log (log)
+  (roslisp:start-ros-node "kr_trace_query")
+  (json-prolog:prolog '("register_ros_package" "iai_maps"))
+  (re-pl-utils:load-local-owl-file "iai_maps" "owl" "room")
+  (re-pl-utils:load-local-owl-file "mod_srdl" "owl" "PR2")
+  (json-prolog:prolog `("load_experiment" ,log))
+  (format t "loaded experiment data, starting extraction...~%")
+  (extract-everything)
+  (cl-prada::write-prada-files-learning *prada-experiences*
+                                        (prada-symbol-defs-from-learn-data *prada-experiences*)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Code from Paradigms of AI Programming
-;;;; Copyright (c) 1991 Peter Norvig
-;;; ==============================
-;;;; The Memoization facility:
-;; (defmacro defun-memo (fn args &body body)
-;;   "Define a memoized function."
-;;   `(memoize (defun ,fn ,args . ,body)))
-
-;; (defun memo (fn &key (key #'first) (test #'eql) name)
-;;   "Return a memo-function of fn."
-;;   (let ((table (make-hash-table :test test)))
-;;     (setf (get name :memo) table)
-;;     #'(lambda (&rest args)
-;;         (let ((k (funcall key args)))
-;;           (multiple-value-bind (val found-p)
-;;               (gethash k table)
-;;             (if found-p val
-;;                 (setf (gethash k table) (apply fn args))))))))
-
-;; (defun memoize (fn-name &key (key #'first) (test #'eql))
-;;   "Replace fn-name's global definition with a memoized version."
-;;   (clear-memoize fn-name)
-;;   (setf (symbol-function fn-name)
-;;         (memo (symbol-function fn-name)
-;;               :name fn-name :key key :test test)))
-
-;; (defun clear-memoize (fn-name)
-;;   "Clear the hash table from a memo function."
-;;   (let ((table (get fn-name 'memo)))
-;;     (when table (clrhash table))))
-
-;; uncached:
-;; Evaluation took:
-;;   206.296 seconds of real time
-;;   47.014938 seconds of total run time (43.566723 user, 3.448215 system)
-;;   [ Run times consist of 1.288 seconds GC time, and 45.727 seconds non-GC time. ]
-;;   22.79% CPU
-;;   63,504 forms interpreted
-;;   493,987,422,870 processor cycles
-;;   3,761,738,288 bytes consed
-
-;; first run with caching:
-;; Evaluation took:
-;;   177.835 seconds of real time
-;;   33.778111 seconds of total run time (31.253953 user, 2.524158 system)
-;;   [ Run times consist of 1.012 seconds GC time, and 32.767 seconds non-GC time. ]
-;;   18.99% CPU
-;;   76,464 forms interpreted
-;;   48 lambdas converted
-;;   425,836,908,818 processor cycles
-;;   3,005,614,432 bytes consed
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun all-owl-instances-of (cls)
-  (cut:with-vars-strictly-bound (?l)
-      (car (json-prolog:prolog-simple-1
-            (format nil "setof(I, owl_individual_of(I, '~a'), L)" cls)))
-    (re-pl-utils:pl-tree->string ?l)))
-
-(defun all-time-steps ()
-  (all-owl-instances-of "http://ias.cs.tum.edu/kb/knowrob.owl#TimePoint"))
 
 (defun get-all-actions ()
   ;; for now, consider performactiondesignator as actions
@@ -110,34 +71,6 @@
         head)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun task-interval (task-id)
-  (assert-single
-   (cut:force-ll
-    (re-pl-utils:pl-query (?s ?e)
-        `(and ("task_start" ,task-id ?s)
-              ("task_end" ,task-id ?e))
-      (cons (re-pl-utils:pl-tree->string ?s)
-            (re-pl-utils:pl-tree->string ?e))))))
-
-(defun time-interval (owlid)
-  (let ((start-time (assert-single-recursive
-                     (re-pl-utils:owl-has-query :subject owlid
-                                                :predicate #"knowrob:startTime")))
-        (end-time (assert-single-recursive
-                   (re-pl-utils:owl-has-query :subject owlid
-                                              :predicate #"knowrob:endTime"))))
-    (cons start-time end-time)))
-
-(defun timesteps-between (start end)
-  (let ((timesteps (sort (all-time-steps) #'string<))
-        (int-start (timepoint-id->time start))
-        (int-end (timepoint-id->time end)))
-    (loop for ts in timesteps
-       for int-ts = (timepoint-id->time ts)
-         when (and (>= int-ts int-start)
-                   (<= int-ts int-end))
-         collect ts)))
 
 (defun timesteps-in-task (task-id)
   (destructuring-bind (start . end)

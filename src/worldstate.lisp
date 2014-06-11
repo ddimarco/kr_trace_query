@@ -302,7 +302,7 @@
    (tf:make-3d-vector 0.3 -0.5 1.3)
    (tf:euler->quaternion :ax 0)))
 
-(defparameter *pose-epsilon* 0.2)
+(defparameter *pose-epsilon* 0.1)
 
 (defun pose-distance (p1 p2)
   (cl-transforms:v-dist
@@ -386,7 +386,8 @@
                  (append
                   (grippers-moved before owl-time)
                   (base-moved before owl-time)
-                  ))))))
+                  ))
+             ))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
@@ -418,7 +419,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; on-top-of predicate
-;; FIXME: checks just axis-aligned (should be ok for kitchen map though)
+;; FIXME: checks just axis-aligned (should be ok for iai kitchen map though)
 (defun on-top-of (pose experiment)
   (flet ((mp-edge (side direction mp)
            (let ((op (ecase side
@@ -482,7 +483,7 @@
    (loop for obj in (manipulation-objects exp-trace)
       collect (list (intern (slot-value obj 'type))
                     (intern (slot-value obj 'name))))
-   ;; TODO: use only relevant objects
+   ;; TODO: keep only relevant objects
    (loop for semmap-obj in (cl-semantic-map-utils:semantic-map-parts
                             (cl-semantic-map-utils:get-semantic-map))
       for name = (cl-semantic-map-utils:name semmap-obj)

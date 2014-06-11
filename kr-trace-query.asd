@@ -13,20 +13,19 @@
                cl-prada
                pr2-reachability-costmap
                visualization_msgs-msg
-               cl-store)
+               cl-store
+               cl-xml-namespace-read-macro)
   :components
   ((:module "src"
             :components
             ((:file "package")
-             (:file "owl-read-macro" :depends-on ("package"))
              (:file "time" :depends-on ("package"))
-             (:file "sandbox" :depends-on ("owl-read-macro" "time"))
+             (:file "sandbox" :depends-on ("time"))
              (:file "vistools" :depends-on ("sandbox"))
              (:file "extract-actions" :depends-on ("sandbox"))
              (:file "worldstate" :depends-on ("extract-actions"))
              (:file "prada-interface" :depends-on ("extract-actions"))
              (:file "experiment" :depends-on ("prada-interface"))
-             (:file "rviz" :depends-on ("experiment"))
-             ))))
+             (:file "rviz" :depends-on ("experiment"))))))
 
 

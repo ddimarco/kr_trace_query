@@ -56,7 +56,7 @@
 
   (crs:<- (create-pose-object ?desig ?object-name ?timestamp ?object-assertions)
     (crs:lisp-fun gensym "LOCATION" ?object-name)
-    ;; (crs:format "creating new location object~%")
+    (crs:format "creating new location object~%")
     (mongo-desig-has-quantitative-at ?object-name ?timestamp ?desig ?object-loc-assertions)
     (crs:lisp-fun append ((location ?object-name)) ?object-loc-assertions ?object-assertions))
 
@@ -67,10 +67,10 @@
     (crs:lisp-pred identity ?name)
     (crs:equal ?additional-assertions nil))
 
-  (crs:<- (object-name ?desig ?name ?timestamp ?additional-assertions)
-    ;; create a new location designator
-    (crs:and (mongo-desig-prop ?desig (obj ?obj)) (crs:lisp-pred null ?obj))
-    (create-pose-object ?desig ?name ?timestamp ?additional-assertions))
+  ;; (crs:<- (object-name ?desig ?name ?timestamp ?additional-assertions)
+  ;;   ;; create a new location designator
+  ;;   (crs:and (mongo-desig-prop ?desig (obj ?obj)) (crs:lisp-pred null ?obj))
+  ;;   (create-pose-object ?desig ?name ?timestamp ?additional-assertions))
 
     ;; TODO: also for object types?
   ;; (crs:<- (object-name ?desig ?name ?additional-assertions)
@@ -189,12 +189,12 @@
 
   ;; FIXME: arm is always :none
   ;; always null duration
-  (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
-    (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
-    (mongo-desig-prop ?mongo-desig (to "PARK"))
-    ;; (arm-used ?popm-id ?arm)
-    (crs:equal ?additional nil)
-    (crs:equal ?action (park-arms pr2)))
+  ;; (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
+  ;;   (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
+  ;;   (mongo-desig-prop ?mongo-desig (to "PARK"))
+  ;;   ;; (arm-used ?popm-id ?arm)
+  ;;   (crs:equal ?additional nil)
+  ;;   (crs:equal ?action (park-arms pr2)))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))

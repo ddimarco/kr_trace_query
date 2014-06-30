@@ -22,7 +22,7 @@
                         (mesh_resource) mesh-resource
                         (a color) alpha))
 
-;; FIXME: spend some time to make the gripper visualization complete
+;; TODO: spend some time to make the gripper visualization complete
 (defun make-robot-markers (timestamp id)
   (let ((frames->resources
          '(("/base_link" . "base_v0/base.dae")
@@ -35,13 +35,7 @@
            ("/r_shoulder_lift_link" . "shoulder_v0/shoulder_lift.dae")
            ("/l_shoulder_lift_link" . "shoulder_v0/shoulder_lift.dae")
            ("/l_gripper_l_finger_link" . "gripper_v0/l_finger.dae")
-           ;; ("/l_gripper_r_finger_link" . "gripper_v0/l_finger.dae")
-           ("/r_gripper_l_finger_link" . "gripper_v0/l_finger.dae")
-           ;; ("/r_gripper_r_finger_link" . "gripper_v0/l_finger.dae")
-          ))
-        ;; (rot (cl-transforms:make-transform (cl-transforms:make-identity-vector)
-        ;;                                    (cl-transforms:axis-angle->quaternion #(1 0 0) pi)))
-        )
+           ("/r_gripper_l_finger_link" . "gripper_v0/l_finger.dae"))))
     (loop for (frame . resource) in frames->resources
          for i from id
          for trans = (lookup-mongo-transform "/map" frame timestamp)
@@ -216,5 +210,6 @@
       (roslisp:publish *vis-publisher* (make-marker-array mlist)))))
 
 (defun playback-experiment (experiment)
+  "Sequentially publishes a rviz visualization of every timestep from the given experiment."
   (dolist (ts (timesteps-between (start-time experiment) (end-time experiment)))
     (visualize-timestamp ts experiment)))

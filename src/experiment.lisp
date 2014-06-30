@@ -13,21 +13,21 @@
 
 (defmethod initialize-instance :after ((trace experiment-trace) &key)
   (let ((root (slot-value trace 'root-owlid)))
-   (if root
-       (setf (slot-value trace 'start-time)
-             (assert-single-recursive (re-pl-utils:owl-has-query
-                                       :subject root
-                                       :predicate #"knowrob:startTime"))
+    (if root
+        (setf (slot-value trace 'start-time)
+              (assert-single-recursive (re-pl-utils:owl-has-query
+                                        :subject root
+                                        :predicate #"knowrob:startTime"))
 
-             (slot-value trace 'end-time)
-             (assert-single-recursive (re-pl-utils:owl-has-query
-                                       :subject root
-                                       :predicate #"knowrob:endTime")))
-       (progn (assert (and (slot-value trace 'start-time) (slot-value trace 'end-time))))))
-    (setf
-     (slot-value trace 'manipulation-objects)
-     (unique-manip-objects-from-interval
-      (timesteps-between (start-time trace) (end-time trace)))))
+              (slot-value trace 'end-time)
+              (assert-single-recursive (re-pl-utils:owl-has-query
+                                        :subject root
+                                        :predicate #"knowrob:endTime")))
+        (progn (assert (and (slot-value trace 'start-time) (slot-value trace 'end-time))))))
+  (setf
+   (slot-value trace 'manipulation-objects)
+   (unique-manip-objects-from-interval
+    (timesteps-between (start-time trace) (end-time trace)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

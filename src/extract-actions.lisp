@@ -1,5 +1,8 @@
 (in-package :ktq)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; utility functions for the action extraction
+
 (defun linked-designator (task-id owl-predicate)
   (assert-single-recursive
    (re-pl-utils:owl-has-query :subject task-id :predicate owl-predicate)))
@@ -26,7 +29,7 @@
     (crs:lisp-fun cdr ?pair ?pair-car )
     (crs:equal ?pair-car ?val))
 
-  ;; TODO: sometimes multiple arm movements
+  ;; there sometimes are multiple arm movements
   (crs:<- (arm-movement-details ?popmid ?details)
     (crs:lisp-fun arm-movements-for-popm ?popmid ?movementids)
     (crs:member ?mid ?movementids)
@@ -37,7 +40,6 @@
     (crs:findall ?details (arm-movement-details ?popmid ?details) ?all-details-lazy)
     (crs:lisp-fun cut:force-ll ?all-details-lazy ?all-details)
     (crs:lisp-fun length ?all-details ?len)
-
     (crs:or
      (crs:-> (crs:> ?len 1)
              (crs:equal ?arm both))
@@ -108,9 +110,7 @@
   (crs:<- (extract-relational ?mongo-desig ?popm-id  ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (to "PERCEIVE"))
     (mongo-desig-prop ?mongo-desig (obj ?obj))
-
     (extract-at-object ?obj ?dir ?obj-parameter ?additional)
-
     (crs:equal ?action (perceive ?dir ?obj-parameter)))
 
   ;; extract parameters for navigation
@@ -140,18 +140,10 @@
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
-  ;;   (crs:or (crs:equal ?arm-used left) (crs:equal ?arm-used right)
-  ;;           (crs:equal ?arm-used none)))
-  ;; (crs:<- (split-manipulation-action ?arm-used ?popm-id ?results)
-  ;;   (crs:equal ?arm-used both)
-  ;;   (crs:format "both arms used in ~a...~%" ?popm-id))
-
    ;; follow trajectory: basically "move-head"
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
     (mongo-desig-prop ?mongo-desig (to "FOLLOW"))
-    ;; (crs:format "~a~%" ?mongo-desig)
     (object-name ?mongo-desig ?name ?timestamp ?additional)
     (crs:equal (follow-trajectory ?name) ?action))
 
@@ -162,9 +154,7 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (crs:equal ?additional nil)
     (arm-used ?popm-id ?arm)
-    ;;(split-manipulation-action ?arm-used ?popm-id ?additional)
-    (crs:equal ?action (put-down ?obj-name ;; ?arm
-                                 )))
+    (crs:equal ?action (put-down ?obj-name)))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
@@ -172,10 +162,8 @@
     (mongo-desig-prop ?mongo-desig (obj ?obj))
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
-    ;; (split-manipulation-action ?arm-used ?popm-id ?additional)
     (crs:equal ?additional nil)
-    (crs:equal ?action (lift ?obj-name ;; ?arm
-                             )))
+    (crs:equal ?action (lift ?obj-name)))
 
   (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
     (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
@@ -184,11 +172,10 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
-    (crs:equal ?action (grasp ?obj-name ;; ?arm
-                              )))
+    (crs:equal ?action (grasp ?obj-name)))
 
   ;; FIXME: arm is always :none
-  ;; always null duration
+  ;; FIXME: action always has null duration
   ;; (crs:<- (extract-relational ?mongo-desig ?popm-id ?timestamp ?action ?additional)
   ;;   (mongo-desig-prop ?mongo-desig (type "TRAJECTORY"))
   ;;   (mongo-desig-prop ?mongo-desig (to "PARK"))
@@ -203,18 +190,11 @@
     (mongo-desig-prop ?obj (name ?obj-name))
     (arm-used ?popm-id ?arm)
     (crs:equal ?additional nil)
-    (crs:equal ?action (carry-object ?obj-name ;; ?arm
-                                     )))
+    (crs:equal ?action (carry-object ?obj-name)))
 
-  ;; FIXME: actions without object names:
-  ;; (defparameter *unusable-actions*
-  ;;      (loop for action in (get-all-actions)
-  ;;         for rel = (owl-desig->relational action)
-  ;;         when (null rel)
-  ;;           collect action))
   )
 
-;; grasp: "http://ias.cs.tum.edu/kb/cram_log.owl#PerformOnProcessModule_6tqgTSvV"
+;; e.g. grasp: "http://ias.cs.tum.edu/kb/cram_log.owl#PerformOnProcessModule_6tqgTSvV"
 (defun owl-desig->relational (popm-id timestamp)
   "Convert a action designator owl id into a relational action."
   (let ((bdg (assert-max-single

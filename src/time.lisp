@@ -10,6 +10,7 @@
   (remove 0 (all-owl-instances-of "http://ias.cs.tum.edu/kb/knowrob.owl#TimePoint")
           :key #'timepoint-id->time))
 
+;; owlids are unix timestamps
 (defun timepoint-id->time (tp-id)
   (let ((str (subseq tp-id (1+ (position #\_ tp-id :from-end t)))))
     ;; FIXME: in case there is a decimal point in there, just cut it off
@@ -32,8 +33,6 @@
      time)
     (string
      (timepoint-id->time time))))
-
-;; how to get tf timestamp from owl timepoints? -> owlid is a unix timestamp
 
 ;; FIXME: these operate only on seconds
 (defun owl-time->local (owlid)

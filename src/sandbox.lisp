@@ -40,8 +40,9 @@
   (json-prolog:prolog `("load_experiment" ,log))
   (format t "loaded experiment data, starting extraction...~%")
   (extract-everything)
-  (cl-prada::write-prada-files-learning *prada-experiences*
-                                        (prada-symbol-defs-from-learn-data *prada-experiences*)))
+  (cl-prada::write-prada-files-learning
+   *prada-experiences*
+   (prada-symbol-defs-from-learn-data *prada-experiences*)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

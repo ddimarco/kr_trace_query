@@ -11,9 +11,9 @@
                (let ((props (re-pl-utils:owl-has owlid)))
                  (loop for ppair in props
                     for prop = (car ppair)
-                    for sprop = (shorten-owl-id (car ppair))
+                    for sprop = (xnrm:shorten-owl-id (car ppair))
                     for v = (cdr ppair)
-                    with sowlid = (shorten-owl-id owlid)
+                    with sowlid = (xnrm:shorten-owl-id owlid)
                     with seen-props = ()
                     unless (member prop
                                    (append ignore-prop-list seen-props)
@@ -22,7 +22,7 @@
                       (cond
                         ((stringp v)
                          (format str " ~s -> ~s [label=~s];~%" sowlid
-                                 (shorten-owl-id v)
+                                 (xnrm:shorten-owl-id v)
                                  sprop)
                          (when (> d 0)
                            (write-owl v (1- d) str (append (list owlid) visited-list))))
@@ -56,8 +56,7 @@
 
     (loop for tp-uri in time-lst
        for tp = (timepoint-id->time tp-uri)
-         with prev = nil
-       do
+         with prev = nil do
          (when prev
            (format str "~a -> ~a;~%" prev tp))
          (setf prev tp))
@@ -76,5 +75,3 @@
          (dolist (st start-tasks)
            (format str "  ~a -> ~a;~%" tp (shorten-uri st))))
     (format str "}~%")))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

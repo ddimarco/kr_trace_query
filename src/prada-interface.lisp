@@ -10,11 +10,18 @@
                      (and (identity action-type) (not (eq (car relational) action-type))))))
              (get-all-actions)))
 
-;; NOTE: prada needs to be set to use state - action - state data
+;; to find unusable actions:
+;; (defparameter *unusable-actions*
+;;      (loop for action in (get-all-actions)
+;;         for rel = (owl-desig->relational action)
+;;         when (null rel)
+;;           collect action))
+
+;; NOTE: learning algorithm needs to be set to use state - action - state data
 (defun make-learn-instance (popm-id timestamp exp-trace)
   (multiple-value-bind (action additional-assertions)
       (owl-desig->relational popm-id timestamp)
-    (make-instance 'cl-prada::prada-learn-state
+    (make-instance 'cl-prada:prada-learn-state
                    :world (reverse
                            (append (world-state-before-action popm-id exp-trace)
                                    additional-assertions))
@@ -30,32 +37,31 @@
   (let ((timestamps (timesteps-between (start-time experiment) (end-time experiment)))
         (all-actions (usable-actions)))
     (loop for action in all-actions
-         for i from 0
+       for i from 0
        for progress = (float (* 100.0 (/ (1+ i) (length all-actions))))
        for start-time = (assert-single-recursive
                          (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:startTime"))
        for end-time = (assert-single-recursive
-                         (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:endTime"))
+                       (re-pl-utils:owl-has-query :subject action :predicate #"knowrob:endTime"))
        when (and (member start-time timestamps :test #'equal)
                  (member end-time timestamps :test #'equal))
        collect
          (progn
            (when (string= start-time end-time)
              (roslisp:ros-warn () "WARNING: action ~a has a duration of length 0!" action))
-          (make-learn-instance action start-time experiment))
-         do
+           (make-learn-instance action start-time experiment))
+       do
          (format t "~$% completed~%" progress))))
 
 (defun prada-symbol-defs-from-learn-data (data)
   (let ((symbol-hash (make-hash-table)))
     (labels ((add-symbol-def (name type params)
-             (let ((old-def (gethash name symbol-hash)))
-               (if (null old-def)
-                   (setf (gethash name symbol-hash) (list type params))
-                   (destructuring-bind (otype oparams) old-def
-                     (assert (and (eq otype type)
-                                  (= oparams params)))))))
-
+               (let ((old-def (gethash name symbol-hash)))
+                 (if (null old-def)
+                     (setf (gethash name symbol-hash) (list type params))
+                     (destructuring-bind (otype oparams) old-def
+                       (assert (and (eq otype type)
+                                    (= oparams params)))))))
              (add-symbol-def-ws (ws)
                (dolist (asrt ws)
                  (add-symbol-def (car asrt) 'cl-prada::primitive (1- (length asrt))))))

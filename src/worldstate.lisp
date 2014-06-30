@@ -1,7 +1,30 @@
 (in-package :kr-trace-query)
 
+(defparameter *use-moved-predicates* nil
+  "Whether to include base-moved, grippers-moved, etc. predicates.
+Useful for debugging, less for plannieng.")
+
+(defparameter *use-relational-poses* nil
+  "Whether to describe positions using directional relations, such as right-of, in-front-of, etc.")
+
+;; poses for the wrist_roll_link frames to be considered "carrying"
+(defparameter *carry-pose-left*
+  (cl-transforms:make-pose
+   (tf:make-3d-vector 0.3 0.5 1.3)
+   (tf:euler->quaternion :ax 0)))
+(defparameter *carry-pose-right*
+  (cl-transforms:make-pose
+   (tf:make-3d-vector 0.3 -0.5 1.3)
+   (tf:euler->quaternion :ax 0)))
+
+(defparameter *pose-epsilon* 0.1)
+
+;; assumption: distance between left & right gripper tip is less than this value -> closed
+(defparameter *gripper-open-distance* 0.1)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; to speed pose lookups up a little
 (defparameter *transform-cache* (make-hash-table :test #'equal))
 
 (defun lookup-mongo-transform (from to owl-time)
@@ -18,7 +41,6 @@
                   (assert-single poses)))))
     (gethash key *transform-cache*)))
 
-;; FIXME: odom_combined <-> base_link
 (defun robot-pose (owl-time)
   (cl-transforms:transform->pose
    (lookup-mongo-transform "/map" "/base_link" owl-time)))
@@ -82,19 +104,6 @@
                    (caddr min-fb) mp))
          finally (return (list min-lr min-tb min-fb))))))
 
-(defun discretize-pose (pose semantic-map time &key name)
-  ;; (flet ((make-relation (dir obj)
-  ;;          (list dir name (->relational-id obj))))
-  ;;   (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
-  ;;       (get-minimal-distance-relation pose time (cl-semantic-map-utils:semantic-map-parts semantic-map))
-  ;;     (list
-  ;;      (make-relation lr-dir lr-obj)
-  ;;      (make-relation tb-dir tb-obj)
-  ;;      (make-relation fb-dir fb-obj))))
-  )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (defparameter *relational-id->obj* (make-hash-table))
 (defgeneric ->relational-id (object))
 
@@ -105,6 +114,17 @@
 
 (defmethod ->relational-id ((object cl-semantic-map-utils:semantic-map-geom))
   (intern (string-upcase (cl-semantic-map-utils:name object)) *package*))
+
+(defun discretize-pose (pose semantic-map time &key name)
+  (flet ((make-relation (dir obj)
+           (list dir name (->relational-id obj))))
+    (if *use-relational-poses*
+     (destructuring-bind ((lr-dir lr-dist lr-obj) (tb-dir tb-dist tb-obj) (fb-dir fb-dist fb-obj))
+         (get-minimal-distance-relation pose time (cl-semantic-map-utils:semantic-map-parts semantic-map))
+       (list
+        (make-relation lr-dir lr-obj)
+        (make-relation tb-dir tb-obj)
+        (make-relation fb-dir fb-obj))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -140,7 +160,6 @@
 ;; TODO: how to identify object designators? -> for now, use name (should use the designator chain)
 ;; TODO: when to use pose from perceptions vs tf?
 ;; TODO: equated designators -> same object
-;; TODO: need to add "after" everywhere -> otherwise is used from previous demo
 
 ;; (defun perception-desigs-of-object-type (type)
 ;;   (json-prolog:prolog `(and ("task_class" ?t ,#"knowrob:UIMAPerception")
@@ -177,7 +196,6 @@
                         name))
         return mng-desig)))
 
-;; TODO: suddenly appearing manipulation objects? -> vien
 (defun mng-extract-pose-relation (mng-desig owl-time)
   "extracts the pose from a designator retrieved from mongodb."
   (if mng-desig
@@ -194,15 +212,8 @@
 ;;                (cl-mongo:get-element :_id (cl-mongo:get-element "designator" doc)))
 ;;                (cl-mongo:docs (cl-mongo:db.find "logged_designators" (cl-mongo:kv "designator.AT.IN" "GRIPPER") :limit 0))))
 
-;; (defparameter *poses-cache* nil)
-;; (defun cache-pose (pose)
-;;   (push pose *poses-cache*))
-
-(defparameter *poses* nil)
-(defun cache-pose (obj time pose)
-  (push (list obj time pose) *poses*))
-
 (defun make-pose-helper (x y z qx qy qz qw)
+  "helper to create a 6D pose in just one function call."
   (cl-transforms:make-pose
    (cl-transforms:make-3d-vector x y z)
    (cl-transforms:make-quaternion qx qy qz qw)))
@@ -219,9 +230,7 @@
              (and
               (crs:bound ?res1)
               (crs:equal ?res1 ?res)
-              (crs:format "got qualitative: ~a!~%" ?res1)
-              ;; (crs:cut)
-              ))
+              (crs:format "got qualitative: ~a!~%" ?res1)))
 
      (crs:-> (mongo-desig-has-quantitative-at ?obj-name ?owl-time ?spec ?res2)
              (and
@@ -254,17 +263,10 @@
     (mongo-desig-prop ?pose2 (orientation ?orientation))
     (crs:equal ?orientation ((x . ?ox) (y . ?oy) (z . ?oz) (w . ?ow)))
 
-    ;; (crs:lisp-fun cl-transforms:make-3d-vector ?x ?y ?z ?origin)
-    ;; (crs:lisp-fun cl-transforms:make-quaternion ?ox ?oy ?oz ?ow ?quaternion)
-    ;; (crs:lisp-fun cl-transforms:make-pose ?origin ?quaternion ?resulting-pose)
-    (crs:lisp-fun make-pose-helper ?x ?y ?z ?ox ?oy ?oz ?ow ?resulting-pose)
-    )
+    (crs:lisp-fun make-pose-helper ?x ?y ?z ?ox ?oy ?oz ?ow ?resulting-pose))
 
   (crs:<- (mongo-desig-has-quantitative-at ?obj-name ?owl-time ?desig ?res)
     (mongo-desig-pose ?desig ?obj-pose)
-    ;; (crs:lisp-fun cache-pose ?obj-name nil ?obj-pose ?_)
-    ;; (crs:format "~a~%" ?desig)
-    ;; (crs:lisp-fun cache-pose ?obj-pose ?_)
     (crs:lisp-fun cl-semantic-map-utils:get-semantic-map ?semmap)
     (crs:lisp-fun discretize-pose ?obj-pose ?semmap ?owl-time :name ?obj-name ?res))
 
@@ -292,23 +294,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; FIXME: where to get these from? maybe from the pm source?
-(defparameter *carry-pose-left*
-  (cl-transforms:make-pose
-   (tf:make-3d-vector 0.3 0.5 1.3)
-   (tf:euler->quaternion :ax 0)))
-(defparameter *carry-pose-right*
-  (cl-transforms:make-pose
-   (tf:make-3d-vector 0.3 -0.5 1.3)
-   (tf:euler->quaternion :ax 0)))
-
-(defparameter *pose-epsilon* 0.1)
-
 (defun pose-distance (p1 p2)
   (cl-transforms:v-dist
    (cl-transforms:origin p1) (cl-transforms:origin p2)))
 
-(defun gripper-pose-bl (side owl-time)
+(defun gripper-pose->bl (side owl-time)
   (cl-transforms:transform->pose
    (lookup-mongo-transform "/base_link"
                            (ecase side
@@ -319,7 +309,7 @@
                                           owl-time)))
 
 (defun gripper-at-p (side p owl-time)
-  (< (pose-distance p (gripper-pose-bl side owl-time))
+  (< (pose-distance p (gripper-pose->bl side owl-time))
      *pose-epsilon*))
 
 (defun arms-parked (owl-time)
@@ -329,7 +319,7 @@
             '(arm-parked right))))
 
 (defun gripper-did-move (side start end)
-  (> (pose-distance (gripper-pose-bl side start) (gripper-pose-bl side end))
+  (> (pose-distance (gripper-pose->bl side start) (gripper-pose->bl side end))
      *pose-epsilon*))
 
 (defun grippers-moved (start end)
@@ -345,8 +335,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; assumption: distance between left & right gripper tip is less than this value -> closed
-(defparameter *gripper-open-distance* 0.1)
 (defun gripper-state (side owl-time)
   (let ((prefix (ecase side
                   (:left "l")
@@ -367,6 +355,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODO: robot-at, gripper-at predicates, parking positions
+
 (defun robot-world-state-at (owl-time semantic-map &key (before nil))
   (let ((rpose (discretize-pose (robot-pose owl-time) semantic-map owl-time :name 'pr2))
         (lgripper (discretize-pose (robot-gripper-pose :left owl-time) semantic-map owl-time
@@ -382,12 +371,10 @@
              (arms-parked owl-time)
              (list (gripper-state :left owl-time)
                    (gripper-state :right owl-time))
-             (if before
+             (if (and *use-moved-predicates* before)
                  (append
                   (grippers-moved before owl-time)
-                  (base-moved before owl-time)
-                  ))
-             ))))
+                  (base-moved before owl-time)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; in-view, modelled after "obj_visible_in_camera" in knowrob_mongo
@@ -617,29 +604,3 @@
           (format out "~a ~a ~a~%" (cl-transforms:x origin)
                   (cl-transforms:y origin)
                   (cl-transforms:z origin))))))
-
-;; (defun mean (poses)
-;;   (/ (reduce #'+ (mapcar #'cl-transforms:v-norm (mapcar #'cl-transforms:origin poses)))
-;;      (length poses)))
-
-;; (defun variance (poses)
-;;   (let ((mean (mean poses)))
-;;     (/ (reduce #'+
-;;                (mapcar (lambda (p)
-;;                          (expt (- (cl-transforms:v-norm (cl-transforms:origin p)) mean) 2))
-;;                        poses))
-;;        (length poses))))
-
-;; (defun std-dev (poses)
-;;   (sqrt (variance poses)))
-
-;; (defun find-best-base-frame (frame timesteps possible-frames)
-;;   (loop for parent-frame in possible-frames
-;;        for variance = (variance (all-poses frame timesteps :base-frame parent-frame)) do
-;;        (format t "frame: ~s; variance: ~a~%" parent-frame variance)
-;;        )
-;;   )
-(defun poses-for-action-types (action-symbol)
-  (let ((actions (usable-actions :action-type action-symbol)))
-    actions
-    ))
